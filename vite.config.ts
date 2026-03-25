@@ -5,6 +5,13 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
+  
+  console.log('Vercel Build Check:', {
+    hasUrl: !!(env.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL),
+    hasKey: !!(env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY),
+    mode
+  });
+
   return {
     server: {
       port: 5173,
