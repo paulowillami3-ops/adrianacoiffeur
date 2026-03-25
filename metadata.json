@@ -1,0 +1,7 @@
+{
+  "name": "Adriana Coiffeur",
+  "description": "App de agendamento completo para salão de beleza com painéis de cliente e administrativo.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
