@@ -1,6 +1,7 @@
 import ReloadPrompt from './src/ReloadPrompt';
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { AppView, Service, BookingState, Appointment, ChatMessage, SubscriptionPlan, UserSubscription, Professional, Category, Product } from './types';
 import { SERVICES } from './constants';
 import { supabase } from './src/supabase';
@@ -458,32 +459,331 @@ const IOSNotification: React.FC<{ message: string; visible: boolean; onClose: ()
 
 // --- Screens Components ---
 
-const LandingScreen: React.FC<{ onStart: () => void; onAdmin: () => void }> = ({ onStart, onAdmin }) => (
-  <div className="relative flex min-h-screen w-full flex-col bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark overflow-hidden transition-colors">
-    <div className="relative w-full h-[55vh] min-h-[400px] overflow-hidden rounded-b-[2.5rem]">
-      <div className="absolute inset-0 bg-center bg-cover bg-no-repeat" style={{ backgroundImage: 'url("/bg-salon.png")' }}></div>
-      <div className="absolute inset-0 bg-gradient-to-t from-white dark:from-background-dark via-white/60 dark:via-background-dark/60 to-transparent"></div>
-      <div className="absolute bottom-0 left-0 w-full p-8 pb-12 flex flex-col items-center justify-end h-full z-10">
-        <div className="mb-4 w-full max-w-[280px]">
-          <img src="/logo.png" alt="Logo Adriana Coiffeur" className="w-full h-auto object-contain" />
+const LandingScreen: React.FC<{ onStart: () => void; onAdmin: () => void }> = ({ onStart, onAdmin }) => {
+  return (
+    <div className="flex flex-col min-h-screen w-full bg-[#f7f4ec] text-slate-800 transition-colors scroll-smooth">
+      {/* Navigation */}
+      <nav className="w-full flex justify-center pt-6 md:pt-10 px-3 md:px-8">
+        <div className="max-w-5xl w-full flex flex-row items-end gap-2 sm:gap-4 md:gap-6 relative">
+          
+          {/* Logo block: Adjusted height and alignment to perfectly center with 2-row buttons */}
+          <div className="flex-shrink-0 h-[38px] sm:h-[46px] md:h-20 flex items-center justify-center pb-1 md:pb-0 -translate-y-[1px]">
+            <img src="/logo-icon.png" alt="Logo Adriana" className="h-full w-auto object-contain" onError={e => (e.currentTarget.style.display = 'none')} />
+          </div>
+          
+          <div className="flex-1 flex flex-col justify-end w-full h-auto md:h-20 relative px-0 md:px-4">
+            
+            {/* Desktop Navigation (Inline) */}
+            <div className="hidden md:flex items-center justify-between gap-3 lg:gap-5 text-[#a38779] font-sans font-bold text-sm lg:text-base tracking-wide pb-3 w-full whitespace-nowrap">
+              <a href="#quem-sou-eu" className="hover:opacity-70 transition-opacity">quem sou eu</a>
+              <span className="text-[#a38779]/40 font-light flex-shrink-0">|</span>
+              <a href="#clube" className="hover:opacity-70 transition-opacity">clube do cabelo perfeito</a>
+              <span className="text-[#a38779]/40 font-light flex-shrink-0">|</span>
+              <button onClick={onStart} className="hover:opacity-70 transition-opacity border-none bg-transparent m-0 p-0 font-bold">agendamento</button>
+              <span className="text-[#a38779]/40 font-light flex-shrink-0">|</span>
+              <a href="#contato" className="hover:opacity-70 transition-opacity">contatos</a>
+            </div>
+
+            {/* Mobile Navigation (2x2 Grid) */}
+            <div className="grid md:hidden grid-cols-[1fr_auto_1.2fr] gap-y-2 pb-2 text-[#a38779] font-sans font-bold text-[11px] sm:text-[13px] tracking-tight w-full items-center text-center mt-2">
+               <a href="#quem-sou-eu" className="hover:opacity-70 px-1 leading-tight w-full text-center">quem sou eu</a>
+               <span className="text-[#a38779]/30 font-light translate-y-[1px]">|</span>
+               <a href="#clube" className="hover:opacity-70 px-1 leading-tight w-full text-center whitespace-nowrap overflow-hidden text-ellipsis">clube do cabelo perfeito</a>
+               
+               <button onClick={onStart} className="hover:opacity-70 font-bold px-1 leading-tight w-full text-center">agendamento</button>
+               <span className="text-[#a38779]/30 font-light translate-y-[1px]">|</span>
+               <a href="#contato" className="hover:opacity-70 px-1 leading-tight w-full text-center">contatos</a>
+            </div>
+
+            {/* Horizontal underline spanning exactly under the text block */}
+            <div className="w-full h-[1.5px] bg-[#a38779]/30 absolute bottom-0 left-0"></div>
+          </div>
         </div>
-        <p className="text-gray-600 dark:text-gray-300 text-base text-center max-w-xs opacity-90 font-medium">
-          Há 20 anos realçando belezas únicas!<br />
-          Mentora, Visagista e Consultora de cor
-        </p>
+      </nav>
+
+      {/* Hero Section */}
+      <section className="relative w-full flex flex-col items-center justify-start pt-4 pb-20 px-4 overflow-hidden">
+        {/* Background Watermark */}
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.8, x: "-50%" }}
+          animate={{ opacity: 0.1, scale: 1, x: "-50%" }}
+          transition={{ duration: 1.5, ease: "easeOut" }}
+          className="absolute top-20 left-1/2 w-[90%] md:w-[60%] max-w-[600px] pointer-events-none z-0"
+        >
+          <img src="/logo-icon.png" alt="" className="w-full h-auto object-contain" onError={e => (e.currentTarget.style.display = 'none')} />
+        </motion.div>
+        
+        {/* Adriana Cutout */}
+        <motion.div 
+          initial={{ opacity: 0, y: 50 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 1, ease: "easeOut", delay: 0.2 }}
+          className="relative z-10 w-full max-w-[450px] mx-auto"
+        >
+          <div className="w-full flex justify-center relative">
+             <img src="/adriana-photo.png" alt="Adriana" className="w-full h-auto drop-shadow-2xl relative z-10" onError={e => {
+                e.currentTarget.style.display = 'none';
+                e.currentTarget.parentElement!.innerHTML = '<div class="w-64 h-96 bg-gray-300 animate-pulse rounded-t-full mt-10"></div>';
+             }} />
+          </div>
+        </motion.div>
+
+        {/* Text Logo */}
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.8, ease: "easeOut", delay: 0.5 }}
+          className="relative z-20 w-full max-w-[380px] mx-auto -mt-24 md:-mt-32 mb-12 flex flex-col items-center"
+        >
+          <img src="/logo-text.png" alt="Adriana Coiffeur" className="w-full h-auto drop-shadow-lg" onError={e => {
+              e.currentTarget.style.display = 'none';
+              e.currentTarget.parentElement!.innerHTML = '<h1 class="text-5xl font-script text-[#a38779] text-center drop-shadow-md">Adriana <span class="block font-serif tracking-[0.2em] text-2xl mt-2 text-slate-800">Coiffeur</span></h1>';
+          }} />
+          <p className="font-sans font-light tracking-[0.1em] text-[#a38779]/80 text-[10px] md:text-[11px] uppercase mt-2 md:mt-4 whitespace-nowrap">
+            Há 20 anos realçando belezas únicas!
+          </p>
+        </motion.div>
+
+        {/* CTA Button */}
+        <motion.button 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 1 }}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={onStart} 
+          className="relative z-20 px-10 py-3 border border-[#a38779] text-[#a38779] text-lg tracking-[0.2em] uppercase bg-transparent hover:bg-[#a38779]/5 transition-all shadow-sm"
+        >
+          agende aqui
+        </motion.button>
+      </section>
+
+      {/* About & Gallery (Clean Luxury Editorial Grid - 1080px baseline with precise 103px gaps) */}
+      <section id="quem-sou-eu" className="w-full bg-[#f7f4ec] py-[80px] px-0 overflow-hidden">
+        <div className="w-full flex flex-col gap-[30px] md:gap-[60px]">
+          
+          {/* FIRST ROW: 231 side (21.4%) | 103 gap (9.6%) | 409 center (37.9%) | 103 gap | 231 side */}
+          <div className="grid grid-cols-[minmax(0,21.43%)_minmax(0,37.94%)_minmax(0,21.43%)] gap-[9.58%] w-full items-center text-center px-0">
+            
+            {/* Col 1: B&W Tools (231.53 x 432.91) */}
+            <div className="aspect-[231.53/432.91] w-full overflow-hidden">
+              <img 
+                src="/tesouraepente.png" 
+                alt="Tools" 
+                className="w-full h-full object-cover grayscale" 
+                onError={e => {
+                  e.currentTarget.src = 'https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?q=80&w=800&auto=format&fit=crop';
+                  e.currentTarget.classList.add('grayscale');
+                }} 
+              />
+            </div>
+
+            {/* Col 2: Main Text (Protected) */}
+            <div className="w-full flex items-center justify-center overflow-hidden h-full">
+              <div className="flex flex-col items-center justify-center gap-1 md:gap-3 w-full bg-[#f7f4ec]">
+                <p className="text-[#a38779] font-sans text-[10px] sm:text-[12px] md:text-[15px] leading-snug md:leading-[1.4] tracking-normal md:tracking-wide m-[0_auto] max-w-full">
+                  <span className="font-bold">Adriana Coiffeur</span> é hair stylist,<br />
+                  visagista, mentora e consultora<br />
+                  de cor, com mais de 20 anos de<br />
+                  experiência no cuidado e<br />
+                  transformação de cabelos,<br />
+                  realçando belezas únicas.
+                </p>
+                <div className="h-2" />
+                <p className="text-[#a38779] font-sans text-[10px] sm:text-[12px] md:text-[15px] leading-snug md:leading-[1.4] tracking-normal md:tracking-wide m-[0_auto] max-w-full">
+                  Sua atuação é baseada em<br />
+                  técnica, planejamento e<br />
+                  acompanhamento contínuo,<br />
+                  respeitando a identidade, o<br />
+                  cabelo, a personalidade, o<br />
+                  estilo de vida e a rotina<br />
+                  de cada cliente.
+                </p>
+              </div>
+            </div>
+
+            {/* Col 3: Adriana Assinando (231.53 x 432.91) */}
+            <div className="aspect-[231.53/432.91] w-full overflow-hidden">
+              <img 
+                src="/adrianaassinando.png" 
+                alt="Adriana Assinando" 
+                className="w-full h-full object-cover" 
+                onError={e => {
+                  e.currentTarget.src = 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?q=80&w=800&auto=format&fit=crop';
+                }} 
+              />
+            </div>
+          </div>
+
+          {/* SECOND ROW: grid alinhado com o topo - central photo larger */}
+          <div className="grid grid-cols-[21.43%_37.94%_21.43%] gap-[9.58%] md:gap-[9.58%] items-stretch">
+            
+            {/* Col 1: gallery-1.png (231.53 x 432.91) */}
+            <div className="aspect-[231.53/432.91] w-full overflow-hidden">
+              <img 
+                src="/gallery-1.png" 
+                alt="Produtos capilares" 
+                className="w-full h-full object-cover" 
+                onError={e => {
+                  e.currentTarget.src = 'https://images.unsplash.com/photo-1560066984-138dadb4c035?q=80&w=800&auto=format&fit=crop';
+                }} 
+              />
+            </div>
+
+            {/* Col 2: gallery-2.png (FOCO - 409.84 x 644.85) */}
+            <div className="aspect-[409.84/644.85] w-full overflow-hidden">
+              <img 
+                src="/gallery-2.png" 
+                alt="Mulher segurando produtos" 
+                className="w-full h-full object-cover" 
+                onError={e => {
+                  e.currentTarget.src = 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?q=80&w=800&auto=format&fit=crop';
+                }} 
+              />
+            </div>
+
+            {/* Col 3: gallery-3.png (231.53 x 432.91) */}
+            <div className="aspect-[231.53/432.91] w-full overflow-hidden">
+              <img 
+                src="/gallery-3.png" 
+                alt="Palestras e eventos" 
+                className="w-full h-full object-cover" 
+                onError={e => {
+                  e.currentTarget.src = 'https://images.unsplash.com/photo-1475721027785-f74eccf877e2?q=80&w=800&auto=format&fit=crop';
+                }} 
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      {/* Club Section (Luxury Dark) */}
+      <section id="clube" className="w-full bg-[#040404] text-[#f7f4ec] py-[80px] px-6 md:px-12 relative z-10 overflow-hidden text-center">
+        
+        {/* The Transition Overlay - Shortened transition keeping top start as per 1737 (~400px) */}
+        <div className="absolute inset-x-0 top-0 h-[250px] md:h-[400px] bg-gradient-to-b from-[#f7f4ec] to-[#040404] -z-10" />
+
+        <div className="w-full flex flex-col items-center">
+          
+          {/* CLUB FOCAL IMAGE with Logo Layered ON TOP (Further down at chest/lower level) */}
+          <motion.div 
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 1.2 }}
+            className="w-full max-w-[500px] md:max-w-[700px] mx-auto overflow-visible relative z-20 mb-8 md:mb-12"
+          >
+            {/* Logo Layer: Re-lowered to the bottom chest/waist level (approx 82% height) */}
+            <div className="absolute inset-x-0 top-[78%] md:top-[82%] flex justify-center z-30 h-28 md:h-40 px-4 drop-shadow-2xl">
+              <img src="/clube-logo.png" alt="Logo Clube" className="h-full w-auto object-contain" onError={e => {
+                 e.currentTarget.style.display = 'none';
+                 e.currentTarget.parentElement!.innerHTML = '<div class="text-[#a38779] text-center drop-shadow-lg scale-110 md:scale-125"><span class="material-symbols-outlined text-4xl">diamond</span><h2 class="font-serif tracking-widest text-2xl uppercase">Clube</h2><h2 class="font-sans tracking-[0.2em] text-lg font-light">PERFEITO</h2></div>';
+              }} />
+            </div>
+
+            <img 
+              src="/club-photo.png" 
+              alt="Clube do Cabelo Perfeito" 
+              className="w-full h-auto object-cover relative z-0" 
+              onError={e => {
+                e.currentTarget.src = 'https://images.unsplash.com/photo-1562322140-8baeececf3df?q=80&w=1200&auto=format&fit=crop';
+              }} 
+            />
+
+          </motion.div>
+        </div>
+        
+
+          
+          <p className="text-[14px] md:text-[16px] leading-[1.6] mb-8 font-light max-w-[440px] text-[#a38779] font-sans tracking-wide mx-auto text-center px-4">
+            <span className="font-bold">O Clube do Cabelo Perfeito</span> existe para<br />
+            facilitar a sua rotina de cuidados, desenvolvido<br />
+            para quem deseja manter o cabelo saudável,<br />
+            alinhado e bonito durante todo o ano.
+          </p>
+          
+          <p className="text-[14px] md:text-[16px] leading-[1.6] mb-8 md:mb-12 font-light max-w-[440px] text-[#a38779] font-sans tracking-wide mx-auto text-center px-4">
+            O cabelo perfeito se encaixa na sua rotina!<br />
+            Com planejamento, previsibilidade e<br />
+            <span className="font-bold">acompanhamento profissional.</span>
+          </p>
+
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            className="w-full h-24 md:h-32 mb-8 md:mb-12 overflow-hidden"
+          >
+            <img 
+               src="/ao entrar no clube.png" 
+               alt="Ao Entrar no Clube" 
+               className="h-full w-auto mx-auto object-contain" 
+               onError={e => {
+                  e.currentTarget.style.display = 'none';
+                  e.currentTarget.parentElement!.innerHTML = '<h3 class="text-xl md:text-2xl tracking-[0.15em] font-semibold text-[#a38779] mb-1">AO ENTRAR</h3><h4 class="font-script text-[3rem] md:text-[3.5rem] text-[#a38779] mb-10 lowercase tracking-wide">no clube</h4>';
+               }} 
+            />
+          </motion.div>
+          
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5, delay: 0.5 }}
+            className="border border-[#a38779]/40 px-8 py-2 md:py-3 mb-8 md:mb-12 inline-block"
+          >
+            <span className="text-[#a38779] tracking-[0.2em] text-[11px] md:text-xs">você tem <strong className="font-bold text-[#a38779] tracking-[0.2em]">acesso a:</strong></span>
+          </motion.div>
+
+          <motion.div 
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8, delay: 0.6 }}
+            className="border border-[#a38779]/30 p-8 md:p-12 w-full max-w-lg text-left bg-[#040404]/50 backdrop-blur-sm mx-auto"
+          >
+            <ul className="space-y-4 text-[#a38779]/90 font-light text-[13px] md:text-[15px] tracking-wide">
+              {[
+                "Planejamento de cuidados;",
+                "Procedimentos organizados ao longo do ano;",
+                "Acompanhamento técnico contínuo;",
+                "Prioridade no agendamento;",
+                "Análise técnica do fio;",
+                "Planejamento de cortes, hidratações e escovas;",
+                "Frequência adequada para cada tipo de cabelo;",
+                "Manutenção estratégica ao longo do ano;"
+              ].map((item, idx) => (
+                <li key={idx} className="flex items-start gap-4">
+                  <span className="material-symbols-outlined text-[#a38779] text-lg shrink-0 mt-0.5">diamond</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </motion.div>
+
+
+      </section>
+
+      {/* Admin Quick Access Footer */}
+      <div id="contato" className="w-full bg-[#040404] border-t border-[#a38779]/10 pt-16 pb-8 px-4 flex flex-col items-center">
+         <div className="text-center mb-12">
+            <h4 className="text-[#a38779] tracking-widest uppercase text-sm mb-4">Contato</h4>
+            <div className="flex flex-col gap-2 text-[#f7f4ec]/70 font-light text-sm">
+               <p>(82) 99312-5883</p>
+               <p>@adrianacoiffeur</p>
+               <p>Shopping da Vila, Centro - Delmiro Gouveia - AL</p>
+            </div>
+         </div>
+        <button onClick={onAdmin} className="text-[#a38779]/30 hover:text-[#a38779] text-[10px] tracking-widest uppercase flex items-center gap-2 transition-colors">
+          <span className="material-symbols-outlined text-[14px]">admin_panel_settings</span>
+          Acesso Administrativo
+        </button>
       </div>
     </div>
-    <div className="flex-1 flex flex-col justify-start px-6 pt-8 pb-8 gap-4 w-full max-w-md mx-auto">
-      <button onClick={onStart} className="group relative flex w-full items-center justify-center rounded-xl h-14 bg-primary hover:bg-primary-dark transition-all shadow-lg shadow-primary/25">
-        <span className="text-white text-lg font-bold">Agendar</span>
-      </button>
-      <button onClick={onAdmin} className="flex w-full items-center justify-center gap-2 rounded-lg h-12 text-gray-500 dark:text-gray-400 hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
-        <span className="material-symbols-outlined text-[20px]">storefront</span>
-        <span className="text-sm font-semibold">Painel Administrativo</span>
-      </button>
-    </div>
-  </div>
-);
+  );
+};
 
 const HomeScreen: React.FC<{
   onAgendar: () => void;
