@@ -672,7 +672,7 @@ const LandingScreen: React.FC<{ onStart: () => void; onAdmin: () => void }> = ({
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 1.2 }}
-            className="w-full max-w-[500px] md:max-w-[700px] mx-auto overflow-visible relative z-20 mb-8 md:mb-12"
+            className="w-full max-w-[500px] md:max-w-[700px] mx-auto overflow-visible relative z-20 mb-12 md:mb-20"
           >
             {/* Logo Layer: Re-lowered to the bottom chest/waist level (approx 82% height) */}
             <div className="absolute inset-x-0 top-[78%] md:top-[82%] flex justify-center z-30 h-28 md:h-40 px-4 drop-shadow-2xl">
@@ -696,18 +696,30 @@ const LandingScreen: React.FC<{ onStart: () => void; onAdmin: () => void }> = ({
         
 
           
-          <p className="text-[14px] md:text-[16px] leading-[1.6] mb-8 font-light max-w-[440px] text-[#a38779] font-sans tracking-wide mx-auto text-center px-4">
+          <motion.p 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8, delay: 0.1 }}
+            className="text-[14px] md:text-[16px] leading-[1.6] mb-8 font-light max-w-[440px] text-[#a38779] font-sans tracking-wide mx-auto text-center px-4"
+          >
             <span className="font-bold">O Clube do Cabelo Perfeito</span> existe para<br />
             facilitar a sua rotina de cuidados, desenvolvido<br />
             para quem deseja manter o cabelo saudável,<br />
             alinhado e bonito durante todo o ano.
-          </p>
+          </motion.p>
           
-          <p className="text-[14px] md:text-[16px] leading-[1.6] mb-8 md:mb-12 font-light max-w-[440px] text-[#a38779] font-sans tracking-wide mx-auto text-center px-4">
+          <motion.p 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            className="text-[14px] md:text-[16px] leading-[1.6] mb-8 md:mb-12 font-light max-w-[440px] text-[#a38779] font-sans tracking-wide mx-auto text-center px-4"
+          >
             O cabelo perfeito se encaixa na sua rotina!<br />
             Com planejamento, previsibilidade e<br />
             <span className="font-bold">acompanhamento profissional.</span>
-          </p>
+          </motion.p>
 
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
