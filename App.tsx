@@ -67,6 +67,24 @@ const AdminClientsScreen: React.FC<{ onBack: () => void; onChat: (id: string, na
   const [search, setSearch] = useState('');
   const [editingClient, setEditingClient] = useState<any | null>(null);
   const [showBirthdaysOnly, setShowBirthdaysOnly] = useState(false);
+  const [modalTab, setModalTab] = useState<'PERFIL' | 'HISTORICO'>('PERFIL');
+  const [clientHistory, setClientHistory] = useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  useEffect(() => {
+    if (editingClient && modalTab === 'HISTORICO') {
+      setIsLoadingHistory(true);
+      supabase
+        .from('appointments')
+        .select(`*, appointment_services(services(name))`)
+        .eq('client_id', editingClient.id)
+        .order('appointment_date', { ascending: false })
+        .then(({ data, error }) => {
+          if (!error && data) setClientHistory(data);
+          setIsLoadingHistory(false);
+        });
+    }
+  }, [editingClient, modalTab]);
 
   const fetchClients = async () => {
     const { data, error } = await supabase
@@ -127,7 +145,10 @@ const AdminClientsScreen: React.FC<{ onBack: () => void; onChat: (id: string, na
     const { error } = await supabase.from('clients').update({
       name: editingClient.name,
       phone: normalizedPhone,
-      birth_date: editingClient.birth_date || null
+      birth_date: editingClient.birth_date || null,
+      birthday: editingClient.birthday || null,
+      notes: editingClient.notes || null,
+      instagram: editingClient.instagram || null
     })
       .eq('id', editingClient.id);
 
@@ -210,11 +231,24 @@ const AdminClientsScreen: React.FC<{ onBack: () => void; onChat: (id: string, na
                   )}
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">{c.phone}</p>
-                {c.birth_date && (
-                   <p className="text-[10px] text-amber-600 dark:text-amber-500 font-bold flex items-center gap-1 mt-0.5">
-                     <span className="material-symbols-outlined text-[12px]">cake</span>
-                     {format(parseISO(c.birth_date), 'dd/MM/yyyy')}
-                   </p>
+                <div className="flex items-center gap-3 mt-0.5">
+                  {(c.birth_date || c.birthday) && (
+                     <p className="text-[10px] text-amber-600 dark:text-amber-500 font-bold flex items-center gap-1">
+                       <span className="material-symbols-outlined text-[12px]">cake</span>
+                       {format(parseISO(c.birthday || c.birth_date), 'dd/MM/yyyy')}
+                     </p>
+                  )}
+                  {c.instagram && (
+                     <p className="text-[10px] text-pink-600 dark:text-pink-400 font-bold flex items-center gap-1 truncate max-w-[100px]">
+                       <span className="material-symbols-outlined text-[12px]">alternate_email</span>
+                       {c.instagram.replace('@', '')}
+                     </p>
+                  )}
+                </div>
+                {c.notes && (
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400 line-clamp-1 mt-1 border-l-2 border-gray-200 dark:border-white/10 pl-1.5 italic">
+                    {c.notes}
+                  </p>
                 )}
               </div>
               <div className="text-xs text-gray-400">
@@ -225,7 +259,7 @@ const AdminClientsScreen: React.FC<{ onBack: () => void; onChat: (id: string, na
               <button onClick={() => onChat(String(c.id), c.name)} className="flex-1 py-2 rounded-lg bg-blue-500/10 text-blue-500 text-xs font-bold flex items-center justify-center gap-1 hover:bg-blue-500/20">
                 <span className="material-symbols-outlined text-sm">chat</span> Chat
               </button>
-              <button onClick={() => setEditingClient(c)} className="flex-1 py-2 rounded-lg bg-gray-100 dark:bg-white/5 text-slate-700 dark:text-gray-300 text-xs font-bold flex items-center justify-center gap-1 hover:bg-gray-200 dark:hover:bg-white/10">
+              <button onClick={() => { setEditingClient(c); setModalTab('PERFIL'); }} className="flex-1 py-2 rounded-lg bg-gray-100 dark:bg-white/5 text-slate-700 dark:text-gray-300 text-xs font-bold flex items-center justify-center gap-1 hover:bg-gray-200 dark:hover:bg-white/10">
                 <span className="material-symbols-outlined text-sm">edit</span> Editar
               </button>
               <button onClick={() => handleDelete(c.id, c.name)} className="flex-1 py-2 rounded-lg bg-red-500/10 text-red-500 text-xs font-bold flex items-center justify-center gap-1 hover:bg-red-500/20">
@@ -239,34 +273,95 @@ const AdminClientsScreen: React.FC<{ onBack: () => void; onChat: (id: string, na
       {/* Edit Modal */}
       {editingClient && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-2xl p-6 shadow-xl animate-enter">
-            <h3 className="font-bold text-lg mb-4 text-slate-900 dark:text-white">Editar Cliente</h3>
-            <div className="space-y-4">
-              <input
-                value={editingClient.name}
-                onChange={e => setEditingClient({ ...editingClient, name: e.target.value })}
-                className="w-full bg-gray-100 dark:bg-background-dark p-3 rounded-lg text-slate-900 dark:text-white"
-                placeholder="Nome"
-              />
-              <input
-                value={editingClient.phone}
-                onChange={e => setEditingClient({ ...editingClient, phone: e.target.value })}
-                className="w-full bg-gray-100 dark:bg-background-dark p-3 rounded-lg text-slate-900 dark:text-white"
-                placeholder="Telefone"
-              />
-              <div className="space-y-1 px-1">
-                <label className="text-[10px] font-bold text-gray-500 uppercase">Data de Nascimento</label>
-                <input
-                  type="date"
-                  value={editingClient.birth_date || ''}
-                  onChange={e => setEditingClient({ ...editingClient, birth_date: e.target.value })}
-                  className="w-full bg-gray-100 dark:bg-background-dark p-3 rounded-lg text-slate-900 dark:text-white text-sm"
-                />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button onClick={() => setEditingClient(null)} className="flex-1 py-3 text-gray-500 font-bold">Cancelar</button>
-                <button onClick={handleUpdate} className="flex-1 py-3 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/20">Salvar</button>
-              </div>
+          <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-2xl p-6 shadow-xl flex flex-col max-h-[90vh] animate-enter">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-lg text-slate-900 dark:text-white">Detalhes do Cliente</h3>
+              <button onClick={() => setEditingClient(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-white"><span className="material-symbols-outlined">close</span></button>
+            </div>
+            
+            <div className="flex gap-2 mb-4 p-1 bg-gray-100 dark:bg-background-dark rounded-xl shrink-0">
+              <button 
+                onClick={() => setModalTab('PERFIL')}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${modalTab === 'PERFIL' ? 'bg-white dark:bg-surface-dark text-slate-900 dark:text-white shadow-sm' : 'text-gray-500'}`}
+              >
+                Perfil
+              </button>
+              <button 
+                onClick={() => setModalTab('HISTORICO')}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${modalTab === 'HISTORICO' ? 'bg-white dark:bg-surface-dark text-slate-900 dark:text-white shadow-sm' : 'text-gray-500'}`}
+              >
+                Histórico
+              </button>
+            </div>
+
+            <div className="overflow-y-auto no-scrollbar flex-1 -mx-2 px-2">
+              {modalTab === 'PERFIL' ? (
+                <div className="space-y-4 pb-2">
+                  <input
+                    value={editingClient.name}
+                    onChange={e => setEditingClient({ ...editingClient, name: e.target.value })}
+                    className="w-full bg-gray-100 dark:bg-background-dark p-3 rounded-lg text-slate-900 dark:text-white"
+                    placeholder="Nome"
+                  />
+                  <input
+                    value={editingClient.phone}
+                    onChange={e => setEditingClient({ ...editingClient, phone: e.target.value })}
+                    className="w-full bg-gray-100 dark:bg-background-dark p-3 rounded-lg text-slate-900 dark:text-white"
+                    placeholder="Telefone"
+                  />
+                  <input
+                    value={editingClient.instagram || ''}
+                    onChange={e => setEditingClient({ ...editingClient, instagram: e.target.value })}
+                    className="w-full bg-gray-100 dark:bg-background-dark p-3 rounded-lg text-slate-900 dark:text-white"
+                    placeholder="Instagram (@usuario)"
+                  />
+                  <div className="space-y-1 px-1">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase">Data de Nascimento</label>
+                    <input
+                      type="date"
+                      value={editingClient.birthday || editingClient.birth_date || ''}
+                      onChange={e => setEditingClient({ ...editingClient, birthday: e.target.value, birth_date: e.target.value })}
+                      className="w-full bg-gray-100 dark:bg-background-dark p-3 rounded-lg text-slate-900 dark:text-white text-sm"
+                    />
+                  </div>
+                  <textarea
+                    value={editingClient.notes || ''}
+                    onChange={e => setEditingClient({ ...editingClient, notes: e.target.value })}
+                    className="w-full bg-gray-100 dark:bg-background-dark p-3 rounded-lg text-slate-900 dark:text-white h-24 resize-none"
+                    placeholder="Anotações gerais, preferências de serviços, coloração, alergias..."
+                  />
+                  <div className="flex gap-3 pt-2">
+                    <button onClick={handleUpdate} className="flex-1 py-3 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/20">Salvar Perfil</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3 pb-2">
+                  {isLoadingHistory ? (
+                    <div className="text-center py-8 text-gray-500 text-sm">Carregando histórico...</div>
+                  ) : clientHistory.length === 0 ? (
+                    <div className="text-center py-8 text-gray-400 text-sm">Nenhum agendamento encontrado.</div>
+                  ) : (
+                    clientHistory.map(app => (
+                      <div key={app.id} className="bg-gray-50 dark:bg-background-dark p-3 rounded-xl border border-gray-200 dark:border-white/5">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="font-bold text-sm text-slate-900 dark:text-white">
+                            {format(parseISO(app.appointment_date), 'dd/MM/yyyy')} às {app.appointment_time.slice(0,5)}
+                          </span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase ${app.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : app.status === 'CANCELLED' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                            {app.status}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {app.appointment_services?.map((as:any) => as.services?.name).join(', ')}
+                        </div>
+                        <div className="text-xs font-bold text-slate-900 dark:text-white mt-2 text-right">
+                          {app.total_price ? `R$ ${app.total_price.toFixed(2)}` : '--'}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
