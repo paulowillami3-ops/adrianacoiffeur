@@ -146,7 +146,6 @@ const AdminClientsScreen: React.FC<{ onBack: () => void; onChat: (id: string, na
       name: editingClient.name,
       phone: normalizedPhone,
       birth_date: editingClient.birth_date || null,
-      birthday: editingClient.birthday || null,
       notes: editingClient.notes || null,
       instagram: editingClient.instagram || null
     })
