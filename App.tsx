@@ -5367,12 +5367,14 @@ const App: React.FC = () => {
 
   /* Refactored fetchServicesList to be reused */
   const fetchCategories = async () => {
-    const { data } = await supabase.from('service_categories').select('*').order('display_order', { ascending: true });
+    const { data, error } = await supabase.from('service_categories').select('*').order('display_order', { ascending: true });
+    if (error) console.error('Error fetching categories:', error);
     if (data) setCategories(data);
   };
 
   const fetchServicesList = async () => {
-    const { data } = await supabase.from('services').select('*').eq('is_active', true).order('display_order', { ascending: true });
+    const { data, error } = await supabase.from('services').select('*').eq('is_active', true).order('display_order', { ascending: true });
+    if (error) console.error('Error fetching services:', error);
     if (data) {
       setServices(data.map((s: any) => ({
         ...s,
@@ -5384,7 +5386,8 @@ const App: React.FC = () => {
 
 
   const fetchProfessionals = async () => {
-    const { data } = await supabase.from('professionals').select('*').eq('is_active', true).order('created_at', { ascending: true });
+    const { data, error } = await supabase.from('professionals').select('*').eq('is_active', true).order('created_at', { ascending: true });
+    if (error) console.error('Error fetching professionals:', error);
     if (data) {
       setProfessionals(data.map((p: any) => ({
         ...p,
@@ -5395,7 +5398,8 @@ const App: React.FC = () => {
   };
 
   const fetchProducts = async () => {
-    const { data } = await supabase.from('products').select('*').eq('is_active', true).order('display_order', { ascending: true });
+    const { data, error } = await supabase.from('products').select('*').eq('is_active', true).order('display_order', { ascending: true });
+    if (error) console.error('Error fetching products:', error);
     if (data) {
       setProducts(data.map((p: any) => ({
         ...p,
@@ -5418,31 +5422,44 @@ const App: React.FC = () => {
 
   useEffect(() => {
     // Fetch chat messages
-    // If Admin and selectedChatClient, fetch for that client
-    // If Customer, fetch by their phone (booking state) OR maybe we need a session state for customer phone?
-    // For simplicity: Customer sees all messages if no phone tied (demo) or filtered by phone if known
-
-    // Admin View Logic:
-    let query = '';
-    if (currentUserRole === 'BARBER' && selectedChatClient) {
-      query = `?clientId=${selectedChatClient.id}`;
-    } else if (currentUserRole === 'CUSTOMER' && booking.customerPhone) {
-      query = `?phone=${booking.customerPhone}`;
-    }
-
     const fetchChat = async () => {
+      // Guard: Only fetch if we have enough info to filter
+      if (currentUserRole === 'BARBER' && !selectedChatClient) {
+        setChatMessages([]);
+        return;
+      }
+      
+      if (currentUserRole === 'CUSTOMER' && !booking.customerPhone) {
+        setChatMessages([]);
+        return;
+      }
+
       let query = supabase.from('chat_messages').select('*').order('sent_at', { ascending: true });
+
       if (currentUserRole === 'BARBER' && selectedChatClient) {
         query = query.eq('client_id', selectedChatClient.id);
 
         // Mark as read if Admin
-        await supabase.from('chat_messages').update({ is_read: true }).eq('client_id', selectedChatClient.id).eq('sender_type', 'CUSTOMER').eq('is_read', false);
+        await supabase.from('chat_messages')
+          .update({ is_read: true })
+          .eq('client_id', selectedChatClient.id)
+          .eq('sender_type', 'CUSTOMER')
+          .eq('is_read', false);
 
       } else if (currentUserRole === 'CUSTOMER' && booking.customerPhone) {
+        const normalizedPhone = booking.customerPhone.replace(/\D/g, '');
         // We need client ID from phone
-        const { data: client } = await supabase.from('clients').select('id').eq('phone', booking.customerPhone).single();
-        if (client) query = query.eq('client_id', client.id);
-        else return; // user not found yet
+        const { data: client } = await supabase.from('clients')
+          .select('id')
+          .eq('phone', normalizedPhone)
+          .single();
+          
+        if (client) {
+          query = query.eq('client_id', client.id);
+        } else {
+          setChatMessages([]);
+          return; // user not found yet
+        }
       }
 
       const { data, error } = await query;
@@ -5451,7 +5468,6 @@ const App: React.FC = () => {
         if (dataString === lastChatDataStringRef.current) return;
         lastChatDataStringRef.current = dataString;
 
-        // ... mappings
         const mapped = data.map((m: any) => ({
           id: String(m.id),
           text: m.message_text,
@@ -5459,8 +5475,11 @@ const App: React.FC = () => {
           timestamp: new Date(m.sent_at)
         }));
         setChatMessages(mapped);
+      } else if (error) {
+        console.error('Error fetching chat:', error.message);
       }
     };
+    
     fetchChat();
     const interval = setInterval(fetchChat, 3000);
     return () => clearInterval(interval);
