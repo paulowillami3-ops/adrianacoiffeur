@@ -4,13 +4,22 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, '.', '');
+  const env = loadEnv(mode, process.cwd(), '');
   
-  console.log('Vercel Build Check:', {
-    hasUrl: !!(env.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL),
-    hasKey: !!(env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY),
-    mode
-  });
+  // Build-time validation for critical variables
+  const supabaseUrl = env.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+
+  if (mode === 'production') {
+    if (!supabaseUrl || supabaseUrl === 'https://placeholder.supabase.co') {
+      throw new Error('VITE_SUPABASE_URL is missing or placeholder! Build stopped.');
+    }
+    if (!supabaseAnonKey || supabaseAnonKey === 'placeholder') {
+      throw new Error('VITE_SUPABASE_ANON_KEY is missing or placeholder! Build stopped.');
+    }
+  }
+
+  console.log('Build Context:', { hasUrl: !!supabaseUrl, hasKey: !!supabaseAnonKey, mode });
 
   return {
     server: {
@@ -64,9 +73,6 @@ export default defineConfig(({ mode }) => {
     define: {
       'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY || process.env.GEMINI_API_KEY),
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY || process.env.GEMINI_API_KEY),
-      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL),
-      'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY),
-      'import.meta.env.VITE_SITE_URL': JSON.stringify(env.VITE_SITE_URL || process.env.VITE_SITE_URL)
     },
     resolve: {
       alias: {
