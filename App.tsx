@@ -3149,6 +3149,29 @@ const AdminDashboard: React.FC<{
               <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">Painel</p>
             </div>
           </button>
+
+          <button
+            onClick={() => {
+               if (window.confirm('Isso irá deslogar você, limpar todo o cache e recarregar o app. Útil para resolver erros de carregamento. Continuar?')) {
+                  localStorage.clear();
+                  if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.getRegistrations().then(registrations => {
+                      for(let registration of registrations) registration.unregister();
+                    });
+                  }
+                  window.location.reload();
+               }
+            }}
+            className="relative group flex flex-col p-4 rounded-3xl bg-red-950 border border-red-900/30 hover:border-red-500 active:scale-[0.98] transition-all overflow-hidden shadow-lg h-32 justify-between"
+          >
+            <div className="size-10 rounded-xl bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-600/20">
+              <span className="material-symbols-outlined filled">cleaning_services</span>
+            </div>
+            <div className="text-left">
+              <h3 className="font-bold text-white">Limpar Tudo</h3>
+              <p className="text-red-400 text-[10px] font-bold uppercase tracking-widest">Resolver Erros</p>
+            </div>
+          </button>
         </div>
 
         {/* View Toggle & Header */}
@@ -5597,7 +5620,6 @@ const App: React.FC = () => {
   // Watch for unread count increase
   useEffect(() => {
     if (unreadCount > prevUnreadCountRef.current && prevUnreadCountRef.current >= 0) {
-      // Trigger Notification
       setNotificationState({ visible: true, message: 'Você tem uma nova mensagem de cliente!' });
       const audio = new Audio('/notification.mp3');
       audio.play().catch(() => { });
@@ -5605,8 +5627,8 @@ const App: React.FC = () => {
     prevUnreadCountRef.current = unreadCount;
   }, [unreadCount]);
 
+  // --- Auto-completion Logic (Integrated with Fetch) ---
   const fetchAppointments = useCallback(async () => {
-    // Security Guard: Customers must have a phone number to fetch appointments
     if (currentUserRole === 'CUSTOMER' && !booking.customerPhone) {
       setAppointments([]);
       return;
@@ -5621,7 +5643,7 @@ const App: React.FC = () => {
       .select(`
                   *,
                   services:appointment_services(
-                  service:services(*)
+                    service:services(*)
                   ),
                   clients${currentUserRole === 'CUSTOMER' ? '!inner' : ''}(
                     id,
@@ -5643,17 +5665,10 @@ const App: React.FC = () => {
         query = query.gte('appointment_date', ninetyDaysAgo);
       }
     } else {
-      // Admin: 
-      if (!showPastHistory) {
-        // If history not requested, default to TODAY onwards
-        query = query.gte('appointment_date', today);
-      } else {
-        // If history requested, limit to last 30 days to avoid extreme payload
-        query = query.gte('appointment_date', thirtyDaysAgo);
-      }
+      if (!showPastHistory) query = query.gte('appointment_date', today);
+      else query = query.gte('appointment_date', thirtyDaysAgo);
     }
 
-    // Fetch Unread Count for Admin (in parallel later if possible, but for now simple)
     if (currentUserRole === 'BARBER') {
       supabase
         .from('chat_messages')
@@ -5665,18 +5680,15 @@ const App: React.FC = () => {
 
     const { data, error } = await query;
 
-    if (data && data.length > 0) {
-      const dataString = JSON.stringify(data);
-      if (dataString === lastAppointmentsDataStringRef.current) return;
-      lastAppointmentsDataStringRef.current = dataString;
+    if (error) {
+      console.error('CRITICAL ERROR fetching appointments:', error);
+      return;
+    }
 
+    if (data && data.length >= 0) {
+      // 1. Mapping logic (always map fresh data to compare)
       const clientIds = [...new Set(data.map((a: any) => a.client_id).filter(Boolean))];
-      const planIds = [...new Set(data
-        .map((a: any) => a.clients?.user_subscriptions?.find((s: any) => s.status === 'APPROVED')?.subscription_plans?.id)
-        .filter(Boolean)
-      )];
-
-      // Parallelize secondary fetches
+      const planIds = [...new Set(data.map((a: any) => a.clients?.user_subscriptions?.find((s: any) => s.status === 'APPROVED')?.subscription_plans?.id).filter(Boolean))];
       const startOfMonth = format(new Date(), 'yyyy-MM-01');
       const [psDataFetch, scDataFetch, monthAppsFetch] = await Promise.all([
         planIds.length > 0 ? supabase.from('plan_services').select('plan_id, service_id, monthly_limit').in('plan_id', planIds) : Promise.resolve({ data: [] }),
@@ -5688,7 +5700,6 @@ const App: React.FC = () => {
       const scData = scDataFetch.data;
       const monthApps = monthAppsFetch.data;
 
-      // Map planId -> { serviceId -> monthly_limit }
       const planServiceLimits: Record<string, Record<string, number>> = {};
       psData?.forEach((ps: any) => {
         const pid = String(ps.plan_id);
@@ -5696,7 +5707,6 @@ const App: React.FC = () => {
         planServiceLimits[pid][String(ps.service_id)] = ps.monthly_limit;
       });
 
-      // Fetch service_components to unpack combos when calculating usage
       const componentsMap: Record<string, string[]> = {};
       scData?.forEach((item: any) => {
         const pid = String(item.parent_service_id);
@@ -5704,7 +5714,6 @@ const App: React.FC = () => {
         componentsMap[pid].push(String(item.component_service_id));
       });
 
-      // Build usage map: clientId -> serviceId -> count
       const clientUsage: Record<string, Record<string, number>> = {};
       monthApps?.forEach((app: any) => {
         const cid = String(app.client_id);
@@ -5720,29 +5729,25 @@ const App: React.FC = () => {
         });
       });
 
-      let newApps = data.map((a: any) => {
+      let mappedApps = data.map((a: any) => {
         const client = a.clients;
         const activeSub = client?.user_subscriptions?.find((s: any) => s.status === 'APPROVED');
-
         let clientSubscription;
         if (activeSub) {
           const plan = activeSub.subscription_plans;
           const planId = String(plan.id);
           const serviceLimits = planServiceLimits[planId] || {};
           const serviceUsage = clientUsage[String(client.id)] || {};
-          const allowedServices = Object.keys(serviceLimits);
-
           clientSubscription = {
             planName: plan.name,
-            cutsUsed: Object.values(serviceUsage).reduce((a, b) => a + b, 0),
+            cutsUsed: Object.values(serviceUsage).reduce((a, b: any) => a + b, 0),
             cutsLimit: plan.monthly_limit || 0,
             serviceLimits,
             serviceUsage,
-            allowedServices,
+            allowedServices: Object.keys(serviceLimits),
             isActive: true
           };
         }
-
         return {
           id: String(a.id),
           date: a.appointment_date,
@@ -5751,60 +5756,102 @@ const App: React.FC = () => {
           totalPrice: a.total_price,
           customerName: client?.name || 'Cliente',
           customerPhone: client?.phone || '',
-          services: a.services.map((s: any) => ({
-            ...s.service,
-            imageUrl: s.service.image_url
-          })),
+          services: a.services.map((s: any) => ({ ...s.service, imageUrl: s.service.image_url })),
           professionalId: a.professional_id,
           clientSubscription
         };
       });
 
-      if (currentUserRole === 'CUSTOMER' && booking.customerPhone) {
-        newApps = newApps.filter((app: Appointment) => app.customerPhone === booking.customerPhone);
-      }
-
-      // Check new appointments
-      if (currentUserRole === 'BARBER' && !isFirstLoadRef.current) {
-        if (newApps.length > prevAppCountRef.current) {
-          if (Notification.permission === 'granted') {
-            new Notification("Novo Agendamento!");
-          }
-          const audio = new Audio('/notification.mp3');
-          audio.play().catch(() => { });
+      // 3. Update state if the resulting data is different
+      const finalDataString = JSON.stringify(mappedApps);
+      if (finalDataString !== lastAppointmentsDataStringRef.current) {
+        if (currentUserRole === 'CUSTOMER' && booking.customerPhone) {
+          mappedApps = mappedApps.filter((app: Appointment) => app.customerPhone === booking.customerPhone);
         }
-      }
 
-      setAppointments(newApps);
-      prevAppCountRef.current = newApps.length;
-      isFirstLoadRef.current = false;
+        // Check new appointments
+        if (currentUserRole === 'BARBER' && !isFirstLoadRef.current) {
+          if (mappedApps.length > prevAppCountRef.current) {
+            if (Notification.permission === 'granted') new Notification("Novo Agendamento!");
+            const audio = new Audio('/notification.mp3');
+            audio.play().catch(() => { });
+          }
+        }
+
+        setAppointments(mappedApps);
+        lastAppointmentsDataStringRef.current = finalDataString;
+        prevAppCountRef.current = mappedApps.length;
+        isFirstLoadRef.current = false;
+      }
     }
   }, [currentUserRole, booking.customerPhone, showPastHistory]);
 
   useEffect(() => {
     fetchAppointments();
+    const channel = supabase.channel('realtime-appointments').on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => fetchAppointments()).subscribe();
+    const interval = setInterval(fetchAppointments, 30000);
+    return () => { supabase.removeChannel(channel); clearInterval(interval); };
+  }, [fetchAppointments]);
 
-    const channel = supabase
-      .channel('realtime-appointments')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'appointments' },
-        (payload) => {
-          console.log('Realtime change detected:', payload);
-          const audio = new Audio('/notification.mp3');
-          audio.play().catch(() => { });
-          fetchAppointments();
+  // --- FOOLPROOF AUTO-CLOSE LOGIC ---
+  useEffect(() => {
+    if (currentUserRole !== 'BARBER') return;
+
+    const checkExpirations = async () => {
+      if (appointments.length === 0) return;
+      
+      const idsToClose: string[] = [];
+      const now = new Date(); // Local time
+
+      const updatedApps = appointments.map(app => {
+        if (app.status === 'PENDING' || app.status === 'CONFIRMED') {
+          try {
+            if (!app.date || !app.time) return app;
+            
+            const [y, m, d] = app.date.split('-').map(Number);
+            const [h, min] = app.time.split(':').map(Number);
+            
+            // Months are 0-indexed in Date constructor. This ensures perfect local time handling.
+            const startTime = new Date(y, m - 1, d, h, min, 0, 0);
+            const duration = app.services.reduce((acc, s) => acc + (Number(s.duration) || 30), 0);
+            
+            // endTime is startTime + duration minutes
+            const endTime = new Date(startTime.getTime() + duration * 60000);
+            
+            if (now > endTime) {
+              console.log(`[Auto-Close] EXPIRED: ${app.id} (Scheduled: ${app.date} ${app.time}, EndTime: ${endTime.toLocaleTimeString()})`);
+              idsToClose.push(app.id);
+              return { ...app, status: 'COMPLETED' };
+            }
+          } catch (err) {
+            console.error('[Auto-Close] Error checking app:', app.id, err);
+          }
         }
-      )
-      .subscribe();
+        return app;
+      });
 
-    const interval = setInterval(fetchAppointments, 30000); // Poll every 30s as backup
+      if (idsToClose.length > 0) {
+        console.log(`[Auto-Close] Triggering DB update for ${idsToClose.length} apps:`, idsToClose);
+        const { error } = await supabase.from('appointments').update({ status: 'COMPLETED' }).in('id', idsToClose);
+        if (error) {
+           console.error('[Auto-Close] DB Update Error:', error);
+        } else {
+           console.log('[Auto-Close] DB Update Success!');
+           // Force update appointments in state to trigger re-renders and stop further checks for these IDs
+           setAppointments(updatedApps);
+        }
+      }
+    };
 
+    // Run once after a brief delay, then periodically
+    const timeout = setTimeout(checkExpirations, 2000); 
+    const interval = setInterval(checkExpirations, 10000);
+    
     return () => {
-      supabase.removeChannel(channel);
+      clearTimeout(timeout);
       clearInterval(interval);
     };
-  }, [fetchAppointments]);
+  }, [appointments, currentUserRole]);
 
   const handleRegisterIdentity = (identity: { name: string, phone: string }) => {
     setBooking(prev => ({ ...prev, customerName: identity.name, customerPhone: identity.phone }));
