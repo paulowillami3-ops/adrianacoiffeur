@@ -231,10 +231,10 @@ const AdminClientsScreen: React.FC<{ onBack: () => void; onChat: (id: string, na
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">{c.phone}</p>
                 <div className="flex items-center gap-3 mt-0.5">
-                  {(c.birth_date || c.birthday) && (
+                  {c.birth_date && (
                      <p className="text-[10px] text-amber-600 dark:text-amber-500 font-bold flex items-center gap-1">
                        <span className="material-symbols-outlined text-[12px]">cake</span>
-                       {format(parseISO(c.birthday || c.birth_date), 'dd/MM/yyyy')}
+                       {format(parseISO(c.birth_date), 'dd/MM/yyyy')}
                      </p>
                   )}
                   {c.instagram && (
@@ -318,8 +318,8 @@ const AdminClientsScreen: React.FC<{ onBack: () => void; onChat: (id: string, na
                     <label className="text-[10px] font-bold text-gray-500 uppercase">Data de Nascimento</label>
                     <input
                       type="date"
-                      value={editingClient.birthday || editingClient.birth_date || ''}
-                      onChange={e => setEditingClient({ ...editingClient, birthday: e.target.value, birth_date: e.target.value })}
+                      value={editingClient.birth_date || ''}
+                      onChange={e => setEditingClient({ ...editingClient, birth_date: e.target.value })}
                       className="w-full bg-gray-100 dark:bg-background-dark p-3 rounded-lg text-slate-900 dark:text-white text-sm"
                     />
                   </div>
