@@ -468,7 +468,17 @@ const LandingScreen: React.FC<{ onStart: () => void; onAdmin: () => void }> = ({
           
           {/* Logo block: Adjusted height and alignment to perfectly center with 2-row buttons */}
           <div className="flex-shrink-0 h-[38px] sm:h-[46px] md:h-20 flex items-center justify-center pb-1 md:pb-0 -translate-y-[1px]">
-            <img src="/logo-icon.png" alt="Logo Adriana" className="h-full w-auto object-contain" onError={e => (e.currentTarget.style.display = 'none')} />
+            <img 
+              src="/logo-icon.webp" 
+              alt="Logo Adriana" 
+              width="80"
+              height="80"
+              loading="eager"
+              fetchpriority="high"
+              decoding="async"
+              className="h-full w-auto object-contain" 
+              onError={e => (e.currentTarget.src = '/logo-icon.png')} 
+            />
           </div>
           
           <div className="flex-1 flex flex-col justify-end w-full h-auto md:h-20 relative px-0 md:px-4">
@@ -510,7 +520,16 @@ const LandingScreen: React.FC<{ onStart: () => void; onAdmin: () => void }> = ({
           transition={{ duration: 1.5, ease: "easeOut" }}
           className="absolute top-20 left-1/2 w-[90%] md:w-[60%] max-w-[600px] pointer-events-none z-0"
         >
-          <img src="/logo-icon.png" alt="" className="w-full h-auto object-contain" onError={e => (e.currentTarget.style.display = 'none')} />
+          <img 
+            src="/logo-icon.webp" 
+            alt="" 
+            width="600"
+            height="600"
+            loading="lazy"
+            decoding="async"
+            className="w-full h-auto object-contain" 
+            onError={e => (e.currentTarget.src = '/logo-icon.png')} 
+          />
         </motion.div>
         
         {/* Adriana Cutout */}
@@ -520,11 +539,20 @@ const LandingScreen: React.FC<{ onStart: () => void; onAdmin: () => void }> = ({
           transition={{ duration: 1, ease: "easeOut", delay: 0.2 }}
           className="relative z-10 w-full max-w-[450px] mx-auto"
         >
-          <div className="w-full flex justify-center relative">
-             <img src="/adriana-photo.png" alt="Adriana" className="w-full h-auto drop-shadow-2xl relative z-10" onError={e => {
-                e.currentTarget.style.display = 'none';
-                e.currentTarget.parentElement!.innerHTML = '<div class="w-64 h-96 bg-gray-300 animate-pulse rounded-t-full mt-10"></div>';
-             }} />
+          <div className="w-full flex justify-center relative min-h-[300px]">
+             <img 
+               src="/adriana-photo.webp" 
+               alt="Adriana" 
+               width="450"
+               height="580"
+               fetchpriority="high"
+               loading="eager"
+               decoding="sync"
+               className="w-full h-auto drop-shadow-2xl relative z-10" 
+               onError={e => {
+                  e.currentTarget.src = '/adriana-photo.png';
+               }} 
+             />
           </div>
         </motion.div>
 
@@ -535,10 +563,19 @@ const LandingScreen: React.FC<{ onStart: () => void; onAdmin: () => void }> = ({
           transition={{ duration: 0.8, ease: "easeOut", delay: 0.5 }}
           className="relative z-20 w-full max-w-[380px] mx-auto -mt-24 md:-mt-32 mb-12 flex flex-col items-center"
         >
-          <img src="/logo-text.png" alt="Adriana Coiffeur" className="w-full h-auto drop-shadow-lg" onError={e => {
-              e.currentTarget.style.display = 'none';
-              e.currentTarget.parentElement!.innerHTML = '<h1 class="text-5xl font-script text-[#a38779] text-center drop-shadow-md">Adriana <span class="block font-serif tracking-[0.2em] text-2xl mt-2 text-slate-800">Coiffeur</span></h1>';
-          }} />
+          <img 
+            src="/logo-text.webp" 
+            alt="Adriana Coiffeur" 
+            width="380"
+            height="120"
+            fetchpriority="high"
+            loading="eager"
+            decoding="async"
+            className="w-full h-auto drop-shadow-lg" 
+            onError={e => {
+                e.currentTarget.src = '/logo-text.png';
+            }} 
+          />
           <p className="font-sans font-light tracking-[0.1em] text-[#a38779]/80 text-[10px] md:text-[11px] uppercase mt-2 md:mt-4 whitespace-nowrap">
             Há 20 anos realçando belezas únicas!
           </p>
@@ -568,11 +605,15 @@ const LandingScreen: React.FC<{ onStart: () => void; onAdmin: () => void }> = ({
             {/* Col 1: B&W Tools (231.53 x 432.91) */}
             <div className="aspect-[231.53/432.91] w-full overflow-hidden">
               <img 
-                src="/tesouraepente.png" 
+                src="/tesouraepente.webp" 
                 alt="Tools" 
+                width="231"
+                height="433"
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover grayscale" 
                 onError={e => {
-                  e.currentTarget.src = 'https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?q=80&w=800&auto=format&fit=crop';
+                  e.currentTarget.src = '/tesouraepente.png';
                   e.currentTarget.classList.add('grayscale');
                 }} 
               />
@@ -605,11 +646,15 @@ const LandingScreen: React.FC<{ onStart: () => void; onAdmin: () => void }> = ({
             {/* Col 3: Adriana Assinando (231.53 x 432.91) */}
             <div className="aspect-[231.53/432.91] w-full overflow-hidden">
               <img 
-                src="/adrianaassinando.png" 
+                src="/adrianaassinando.webp" 
                 alt="Adriana Assinando" 
+                width="231"
+                height="433"
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover" 
                 onError={e => {
-                  e.currentTarget.src = 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?q=80&w=800&auto=format&fit=crop';
+                  e.currentTarget.src = '/adrianaassinando.png';
                 }} 
               />
             </div>
@@ -621,11 +666,15 @@ const LandingScreen: React.FC<{ onStart: () => void; onAdmin: () => void }> = ({
             {/* Col 1: gallery-1.png (231.53 x 432.91) */}
             <div className="aspect-[231.53/432.91] w-full overflow-hidden">
               <img 
-                src="/gallery-1.png" 
+                src="/gallery-1.webp" 
                 alt="Produtos capilares" 
+                width="231"
+                height="433"
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover" 
                 onError={e => {
-                  e.currentTarget.src = 'https://images.unsplash.com/photo-1560066984-138dadb4c035?q=80&w=800&auto=format&fit=crop';
+                  e.currentTarget.src = '/gallery-1.png';
                 }} 
               />
             </div>
@@ -633,11 +682,15 @@ const LandingScreen: React.FC<{ onStart: () => void; onAdmin: () => void }> = ({
             {/* Col 2: gallery-2.png (FOCO - 409.84 x 644.85) */}
             <div className="aspect-[409.84/644.85] w-full overflow-hidden">
               <img 
-                src="/gallery-2.png" 
+                src="/gallery-2.webp" 
                 alt="Mulher segurando produtos" 
+                width="410"
+                height="645"
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover" 
                 onError={e => {
-                  e.currentTarget.src = 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?q=80&w=800&auto=format&fit=crop';
+                  e.currentTarget.src = '/gallery-2.png';
                 }} 
               />
             </div>
@@ -645,11 +698,15 @@ const LandingScreen: React.FC<{ onStart: () => void; onAdmin: () => void }> = ({
             {/* Col 3: gallery-3.png (231.53 x 432.91) */}
             <div className="aspect-[231.53/432.91] w-full overflow-hidden">
               <img 
-                src="/gallery-3.png" 
+                src="/gallery-3.webp" 
                 alt="Palestras e eventos" 
+                width="231"
+                height="433"
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover" 
                 onError={e => {
-                  e.currentTarget.src = 'https://images.unsplash.com/photo-1475721027785-f74eccf877e2?q=80&w=800&auto=format&fit=crop';
+                  e.currentTarget.src = '/gallery-3.png';
                 }} 
               />
             </div>
@@ -683,11 +740,15 @@ const LandingScreen: React.FC<{ onStart: () => void; onAdmin: () => void }> = ({
             </div>
 
             <img 
-              src="/club-photo.png" 
+              src="/club-photo.webp" 
               alt="Clube do Cabelo Perfeito" 
+              width="700"
+              height="800"
+              loading="lazy"
+              decoding="async"
               className="w-full h-auto object-cover relative z-0" 
               onError={e => {
-                e.currentTarget.src = 'https://images.unsplash.com/photo-1562322140-8baeececf3df?q=80&w=1200&auto=format&fit=crop';
+                e.currentTarget.src = '/club-photo.png';
               }} 
             />
 
@@ -729,12 +790,15 @@ const LandingScreen: React.FC<{ onStart: () => void; onAdmin: () => void }> = ({
             className="w-full h-24 md:h-32 mb-8 md:mb-12 overflow-hidden"
           >
             <img 
-               src="/ao entrar no clube.png" 
+               src="/ao entrar no clube.webp" 
                alt="Ao Entrar no Clube" 
+               width="320"
+               height="120"
+               loading="lazy"
+               decoding="async"
                className="h-full w-auto mx-auto object-contain" 
                onError={e => {
-                  e.currentTarget.style.display = 'none';
-                  e.currentTarget.parentElement!.innerHTML = '<h3 class="text-xl md:text-2xl tracking-[0.15em] font-semibold text-[#a38779] mb-1">AO ENTRAR</h3><h4 class="font-script text-[3rem] md:text-[3.5rem] text-[#a38779] mb-10 lowercase tracking-wide">no clube</h4>';
+                  e.currentTarget.src = '/ao entrar no clube.png';
                }} 
             />
           </motion.div>
@@ -806,7 +870,16 @@ const HomeScreen: React.FC<{
 }> = ({ onAgendar, onChat, onPerfil, onMais, onAssinatura, onProducts }) => (
   <div className="relative flex h-full min-h-screen w-full flex-col overflow-x-hidden pb-24 bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark transition-colors">
     <header className="sticky top-0 z-50 flex items-center justify-center bg-white/95 dark:bg-background-dark/95 backdrop-blur-md px-4 py-3 border-b border-gray-200 dark:border-white/5 gap-2 transition-colors">
-      <img src="/logo.png" alt="Logo" className="h-8 w-auto" />
+      <img 
+        src="/logo.webp" 
+        alt="Logo" 
+        width="32"
+        height="32"
+        loading="eager"
+        decoding="async"
+        className="h-8 w-auto" 
+        onError={e => (e.currentTarget.src = '/logo.png')} 
+      />
       <h2 className="text-lg font-bold leading-tight tracking-tight text-center text-slate-900 dark:text-white">Adriana Coiffeur</h2>
     </header>
     <main className="flex-1 flex flex-col px-4 pt-4 max-w-md mx-auto w-full">
@@ -816,7 +889,16 @@ const HomeScreen: React.FC<{
       <div className="grid grid-cols-2 gap-3 mb-6">
         <button onClick={onAgendar} className="relative group flex flex-col items-start justify-end p-4 h-40 w-full rounded-2xl overflow-hidden shadow-lg hover:shadow-xl active:scale-[0.98] transition-all">
           <div className="absolute inset-0 z-0">
-            <img alt="Agendamento" className="h-full w-full object-cover" src="/agendamento.png" />
+            <img 
+              alt="Agendamento" 
+              src="/agendamento.webp" 
+              width="200"
+              height="160"
+              loading="lazy"
+              decoding="async"
+              className="h-full w-full object-cover" 
+              onError={e => (e.currentTarget.src = '/agendamento.png')} 
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent"></div>
           </div>
           <div className="relative z-10 flex flex-col items-start gap-1">
@@ -828,7 +910,16 @@ const HomeScreen: React.FC<{
         </button>
         <button onClick={onChat} className="relative group flex flex-col items-start justify-end p-4 h-40 w-full rounded-2xl overflow-hidden shadow-lg border border-gray-200 dark:border-white/5 active:scale-[0.98] transition-all">
           <div className="absolute inset-0 z-0">
-            <img alt="Adriana" className="h-full w-full object-cover" src="/adriana.png" />
+            <img 
+              alt="Adriana" 
+              src="/adriana.webp" 
+              width="200"
+              height="160"
+              loading="lazy"
+              decoding="async"
+              className="h-full w-full object-cover" 
+              onError={e => (e.currentTarget.src = '/adriana.png')} 
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent"></div>
           </div>
           <div className="relative z-10 flex flex-col items-start gap-1">
@@ -840,7 +931,16 @@ const HomeScreen: React.FC<{
         </button>
         <button onClick={onAssinatura} className="relative group flex flex-col items-start justify-end h-32 w-full rounded-2xl overflow-hidden shadow-lg border border-gray-200 dark:border-white/5 active:scale-[0.98] transition-all col-span-2">
           <div className="absolute inset-0 z-0">
-            <img alt="Clube do Cabelo Perfeito" className="h-full w-full object-cover" src="/clube.png" />
+            <img 
+              alt="Clube do Cabelo Perfeito" 
+              src="/clube.webp" 
+              width="400"
+              height="128"
+              loading="lazy"
+              decoding="async"
+              className="h-full w-full object-cover" 
+              onError={e => (e.currentTarget.src = '/clube.png')} 
+            />
             <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
           </div>
         </button>
