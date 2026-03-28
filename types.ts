@@ -2,6 +2,7 @@
 export type AppView =
   | 'LANDING'
   | 'HOME'
+  | 'SELECT_CATEGORY'
   | 'SELECT_SERVICES'
   | 'SELECT_DATE_TIME'
   | 'REVIEW'
@@ -18,7 +19,11 @@ export type AppView =
   | 'SELECT_PLAN'
   | 'SUBSCRIPTION_PAYMENT'
   | 'ADMIN_SUBSCRIPTIONS'
-  | 'ADMIN_MANAGE_PLANS';
+  | 'ADMIN_MANAGE_PLANS'
+  | 'ADMIN_PROFESSIONALS'
+  | 'SELECT_PROFESSIONAL'
+  | 'ADMIN_PRODUCTS'
+  | 'PRODUCTS';
 
 export interface SubscriptionPlan {
   id: string;
@@ -51,6 +56,37 @@ export interface BlockedSlot {
   date: string;
   time: string;
   reason: string;
+  professional_id?: string;
+}
+
+export interface Professional {
+  id: string;
+  name: string;
+  role: string;
+  bio?: string;
+  imageUrl?: string;
+  color: string;
+  isActive: boolean;
+  created_at?: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  display_order: number;
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  description?: string;
+  price: number;
+  imageUrl?: string;
+  stock_quantity: number;
+  display_order: number;
+  isActive: boolean;
 }
 
 export interface Service {
@@ -60,6 +96,8 @@ export interface Service {
   price: number;
   duration: number;
   imageUrl: string;
+  category_id?: string;
+  display_order: number;
   popular?: boolean;
 }
 
@@ -72,6 +110,9 @@ export interface Appointment {
   time: string; // HH:mm
   totalPrice: number;
   status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
+  client_id?: number;
+  professionalId?: string;
+  professionalName?: string;
   clientSubscription?: {
     planName: string;
     cutsUsed: number;
@@ -84,8 +125,10 @@ export interface BookingState {
   customerName: string;
   customerPhone: string;
   selectedServices: Service[];
+  selectedCategory?: Category;
   selectedDate: string;
   selectedTime: string;
+  selectedProfessional?: Professional;
   selectedPlan?: SubscriptionPlan;
   clientSubscription?: {
     planName: string;
@@ -93,6 +136,7 @@ export interface BookingState {
     cutsLimit: number;
     isActive: boolean;
   };
+  birthDate?: string;
 }
 
 export interface ChatMessage {

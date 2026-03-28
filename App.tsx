@@ -1,7 +1,7 @@
 import ReloadPrompt from './src/ReloadPrompt';
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { AppView, Service, BookingState, Appointment, ChatMessage, SubscriptionPlan, UserSubscription } from './types';
+import { AppView, Service, BookingState, Appointment, ChatMessage, SubscriptionPlan, UserSubscription, Professional, Category, Product } from './types';
 import { SERVICES } from './constants';
 import { supabase } from './src/supabase';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -30,31 +30,33 @@ const CustomerLoginScreen: React.FC<{ onLogin: (phone: string) => void; onBack: 
   };
 
   return (
-    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col p-6 max-w-md mx-auto w-full transition-colors justify-center">
-      <button onClick={onBack} className="absolute top-6 left-6 size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400"><span className="material-symbols-outlined">arrow_back</span></button>
-      <div className="text-center mb-8">
-        <div className="size-20 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto mb-4"><span className="material-symbols-outlined text-4xl">smartphone</span></div>
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Identifique-se</h2>
-        <p className="text-gray-500 dark:text-gray-400 text-sm mt-2">Informe seu celular para ver seus agendamentos.</p>
-      </div>
-      <div className="space-y-4">
-        <input
-          value={phone}
-          onChange={handlePhoneChange}
-          className="w-full bg-white dark:bg-surface-dark border border-gray-200 dark:border-white/10 rounded-xl p-4 text-slate-900 dark:text-white placeholder:text-gray-400 text-center text-lg tracking-widest font-mono"
-          placeholder="(00) 0 0000-0000"
-          type="tel"
-        />
-        <button
-          onClick={() => {
-            const raw = phone.replace(/\D/g, '');
-            if (raw.length > 8) onLogin(raw);
-            else alert('Telefone inválido');
-          }}
-          className="w-full bg-primary py-4 rounded-xl font-bold shadow-lg shadow-primary/20 text-white"
-        >
-          Ver Agendamentos
-        </button>
+    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen transition-colors">
+      <div className="flex flex-col min-h-screen relative p-6 max-w-md mx-auto w-full justify-center">
+        <button onClick={onBack} className="absolute top-6 left-6 size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400 transition-colors"><span className="material-symbols-outlined">arrow_back</span></button>
+        <div className="text-center mb-8">
+          <div className="size-20 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto mb-4"><span className="material-symbols-outlined text-4xl">smartphone</span></div>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Identifique-se</h2>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-2">Informe seu celular para ver seus agendamentos.</p>
+        </div>
+        <div className="space-y-4">
+          <input
+            value={phone}
+            onChange={handlePhoneChange}
+            className="w-full bg-white dark:bg-surface-dark border border-gray-200 dark:border-white/10 rounded-xl p-4 text-slate-900 dark:text-white placeholder:text-gray-400 text-center text-lg tracking-widest font-mono focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+            placeholder="(00) 0 0000-0000"
+            type="tel"
+          />
+          <button
+            onClick={() => {
+              const raw = phone.replace(/\D/g, '');
+              if (raw.length > 8) onLogin(raw);
+              else alert('Telefone inválido');
+            }}
+            className="w-full bg-primary py-4 rounded-xl font-bold shadow-lg shadow-primary/20 text-white active:scale-[0.98] transition-all"
+          >
+            Ver Agendamentos
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -64,6 +66,7 @@ const AdminClientsScreen: React.FC<{ onBack: () => void; onChat: (id: string, na
   const [clients, setClients] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [editingClient, setEditingClient] = useState<any | null>(null);
+  const [showBirthdaysOnly, setShowBirthdaysOnly] = useState(false);
 
   const fetchClients = async () => {
     const { data, error } = await supabase
@@ -123,7 +126,8 @@ const AdminClientsScreen: React.FC<{ onBack: () => void; onChat: (id: string, na
 
     const { error } = await supabase.from('clients').update({
       name: editingClient.name,
-      phone: normalizedPhone
+      phone: normalizedPhone,
+      birth_date: editingClient.birth_date || null
     })
       .eq('id', editingClient.id);
 
@@ -134,30 +138,55 @@ const AdminClientsScreen: React.FC<{ onBack: () => void; onChat: (id: string, na
     }
   };
 
+  const currentMonth = new Date().getMonth() + 1;
+
   const filtered = clients.filter(c => {
     const searchLower = search.toLowerCase();
     const nameMatch = c.name.toLowerCase().includes(searchLower);
     const searchDigits = search.replace(/\D/g, '');
     const phoneMatch = searchDigits ? c.phone.includes(searchDigits) : false;
-    return nameMatch || phoneMatch;
+    
+    let birthdayMatch = true;
+    if (showBirthdaysOnly) {
+      if (!c.birth_date) return false;
+      // Usar parseISO para garantir mês correto sem deslocamento
+      const bMonth = parseISO(c.birth_date).getMonth() + 1;
+      birthdayMatch = (bMonth === currentMonth);
+    }
+    
+    return (nameMatch || phoneMatch) && birthdayMatch;
   });
 
   return (
     <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col transition-colors relative">
-      <header className="sticky top-0 z-50 p-4 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 flex items-center justify-between backdrop-blur-md transition-colors">
-        <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400"><span className="material-symbols-outlined">arrow_back</span></button>
-        <h2 className="font-bold text-slate-900 dark:text-white">Clientes Cadastrados</h2>
-        <div className="bg-gray-100 dark:bg-white/10 px-3 py-1 rounded-full text-xs font-bold text-gray-600 dark:text-gray-300">
-          {clients.length}
+      <header className="sticky top-0 z-50 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md transition-colors">
+        <div className="max-w-md mx-auto w-full flex items-center justify-between p-4">
+          <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400 font-bold transition-colors">
+            <span className="material-symbols-outlined">arrow_back</span>
+          </button>
+          <h2 className="font-bold text-slate-900 dark:text-white">Clientes Cadastrados</h2>
+          <div className="bg-gray-100 dark:bg-white/10 px-3 py-1 rounded-full text-xs font-bold text-gray-600 dark:text-gray-300">
+            {clients.length}
+          </div>
         </div>
       </header>
-      <div className="p-4 bg-white dark:bg-background-dark border-b border-gray-200 dark:border-white/5 sticky top-[73px] z-40">
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar por nome ou telefone..."
-          className="w-full bg-gray-100 dark:bg-surface-dark p-3 rounded-lg border-transparent text-sm text-slate-900 dark:text-white"
-        />
+      <div className="p-4 bg-white dark:bg-background-dark border-b border-gray-200 dark:border-white/5 sticky top-[73px] z-40 flex gap-2">
+        <div className="relative flex-1">
+          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">search</span>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar..."
+            className="w-full bg-gray-100 dark:bg-surface-dark pl-9 pr-3 py-3 rounded-lg border-transparent text-sm text-slate-900 dark:text-white"
+          />
+        </div>
+        <button 
+          onClick={() => setShowBirthdaysOnly(!showBirthdaysOnly)}
+          className={`px-4 rounded-lg flex items-center gap-2 text-xs font-bold transition-all border ${showBirthdaysOnly ? 'bg-amber-500 border-amber-500 text-white shadow-lg shadow-amber-500/20' : 'bg-white dark:bg-surface-dark border-gray-200 dark:border-white/5 text-gray-500'}`}
+        >
+          <span className="material-symbols-outlined text-sm">{showBirthdaysOnly ? 'cake' : 'event'}</span>
+          {showBirthdaysOnly ? 'Aniversariantes' : 'Todos'}
+        </button>
       </div>
       <main className="p-4 space-y-2 flex-1 pb-24">
         {filtered.map(c => (
@@ -181,6 +210,12 @@ const AdminClientsScreen: React.FC<{ onBack: () => void; onChat: (id: string, na
                   )}
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">{c.phone}</p>
+                {c.birth_date && (
+                   <p className="text-[10px] text-amber-600 dark:text-amber-500 font-bold flex items-center gap-1 mt-0.5">
+                     <span className="material-symbols-outlined text-[12px]">cake</span>
+                     {format(parseISO(c.birth_date), 'dd/MM/yyyy')}
+                   </p>
+                )}
               </div>
               <div className="text-xs text-gray-400">
                 #{c.id}
@@ -219,6 +254,15 @@ const AdminClientsScreen: React.FC<{ onBack: () => void; onChat: (id: string, na
                 className="w-full bg-gray-100 dark:bg-background-dark p-3 rounded-lg text-slate-900 dark:text-white"
                 placeholder="Telefone"
               />
+              <div className="space-y-1 px-1">
+                <label className="text-[10px] font-bold text-gray-500 uppercase">Data de Nascimento</label>
+                <input
+                  type="date"
+                  value={editingClient.birth_date || ''}
+                  onChange={e => setEditingClient({ ...editingClient, birth_date: e.target.value })}
+                  className="w-full bg-gray-100 dark:bg-background-dark p-3 rounded-lg text-slate-900 dark:text-white text-sm"
+                />
+              </div>
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setEditingClient(null)} className="flex-1 py-3 text-gray-500 font-bold">Cancelar</button>
                 <button onClick={handleUpdate} className="flex-1 py-3 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/20">Salvar</button>
@@ -350,16 +394,16 @@ const LandingScreen: React.FC<{ onStart: () => void; onAdmin: () => void }> = ({
 const HomeScreen: React.FC<{
   onAgendar: () => void;
   onChat: () => void;
-  onPerfil: () => void;
   onMais: () => void;
   onAssinatura: () => void;
-}> = ({ onAgendar, onChat, onPerfil, onMais, onAssinatura }) => (
+  onProducts: () => void;
+}> = ({ onAgendar, onChat, onPerfil, onMais, onAssinatura, onProducts }) => (
   <div className="relative flex h-full min-h-screen w-full flex-col overflow-x-hidden pb-24 bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark transition-colors">
     <header className="sticky top-0 z-50 flex items-center justify-center bg-white/95 dark:bg-background-dark/95 backdrop-blur-md px-4 py-3 border-b border-gray-200 dark:border-white/5 gap-2 transition-colors">
       <img src="/logo.png" alt="Logo" className="h-8 w-auto" />
       <h2 className="text-lg font-bold leading-tight tracking-tight text-center text-slate-900 dark:text-white">Adriana Coiffeur</h2>
     </header>
-    <main className="flex-1 flex flex-col px-4 pt-4">
+    <main className="flex-1 flex flex-col px-4 pt-4 max-w-md mx-auto w-full">
       <div className="mb-4">
         <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Vamos agendar o seu<br />corte?</h1>
       </div>
@@ -388,10 +432,21 @@ const HomeScreen: React.FC<{
             <span className="text-left text-sm font-bold leading-tight text-white">Falar com Adriana</span>
           </div>
         </button>
-        <button onClick={onAssinatura} className="relative group flex flex-col items-start justify-end h-40 w-full rounded-2xl overflow-hidden shadow-lg border border-gray-200 dark:border-white/5 active:scale-[0.98] transition-all col-span-2">
+        <button onClick={onAssinatura} className="relative group flex flex-col items-start justify-end h-32 w-full rounded-2xl overflow-hidden shadow-lg border border-gray-200 dark:border-white/5 active:scale-[0.98] transition-all col-span-2">
           <div className="absolute inset-0 z-0">
             <img alt="Clube do Cabelo Perfeito" className="h-full w-full object-cover" src="/clube.png" />
             <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
+          </div>
+        </button>
+        <button onClick={onProducts} className="relative group flex flex-col items-start justify-end p-4 h-32 w-full rounded-[2rem] overflow-hidden shadow-lg bg-gradient-to-br from-pink-500 to-rose-600 active:scale-[0.98] transition-all col-span-2">
+          <div className="absolute top-0 right-0 p-4 opacity-20">
+             <span className="material-symbols-outlined text-6xl text-white">shopping_basket</span>
+          </div>
+          <div className="relative z-10 flex flex-col items-start gap-1">
+            <div className="mb-1 rounded-full bg-white/20 p-2 text-white backdrop-blur-md">
+              <span className="material-symbols-outlined text-[20px]">storefront</span>
+            </div>
+            <span className="text-left text-sm font-bold leading-tight text-white uppercase tracking-wider">Conheça nossa Vitrine</span>
           </div>
         </button>
       </div>
@@ -435,6 +490,57 @@ const HomeScreen: React.FC<{
   </div>
 );
 
+const SelectCategoryScreen: React.FC<{
+  categories: Category[];
+  booking: BookingState;
+  setBooking: React.Dispatch<React.SetStateAction<BookingState>>;
+  onNext: () => void;
+  onBack: () => void;
+}> = ({ categories, booking, setBooking, onNext, onBack }) => {
+  return (
+    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen transition-colors">
+      <div className="flex flex-col min-h-screen relative">
+        <header className="sticky top-0 z-20 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 backdrop-blur-sm transition-colors">
+          <div className="max-w-md mx-auto w-full flex items-center p-4">
+            <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-600 dark:text-gray-400 transition-colors">
+              <span className="material-symbols-outlined font-bold">arrow_back</span>
+            </button>
+            <h2 className="text-lg font-bold flex-1 text-center pr-10 text-slate-900 dark:text-white">Categorias</h2>
+          </div>
+        </header>
+        <main className="flex-1 p-6 max-w-md mx-auto w-full">
+          <div className="mb-8">
+            <h1 className="text-3xl font-extrabold mb-2 text-slate-900 dark:text-white">O que faremos hoje?</h1>
+            <p className="text-gray-600 dark:text-gray-400 text-sm">Selecione uma categoria para ver os serviços disponíveis.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            {categories.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => {
+                  setBooking({ ...booking, selectedCategory: cat });
+                  onNext();
+                }}
+                className="bg-white dark:bg-surface-dark p-6 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-sm hover:border-primary/40 hover:scale-[1.02] transition-all flex flex-col items-center gap-3 text-center group"
+              >
+                <div className="size-16 bg-primary/10 text-primary rounded-full flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
+                  <span className="material-symbols-outlined text-3xl">{cat.icon || 'category'}</span>
+                </div>
+                <div className="flex flex-col items-center">
+                  <span className="font-bold text-slate-900 dark:text-white leading-tight">{cat.name}</span>
+                  {cat.description && (
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1 line-clamp-2 max-w-[120px] leading-tight font-medium">{cat.description}</p>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+};
+
 const SelectServicesScreen: React.FC<{
   booking: BookingState;
   setBooking: React.Dispatch<React.SetStateAction<BookingState>>;
@@ -465,239 +571,253 @@ const SelectServicesScreen: React.FC<{
   const totalPrice = booking.selectedServices.reduce((sum, s) => sum + s.price, 0);
 
   return (
-    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col transition-colors">
-      <header className="sticky top-0 z-20 bg-white/95 dark:bg-background-dark/95 backdrop-blur-sm border-b border-gray-200 dark:border-white/5 flex items-center p-4 transition-colors">
-        <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-600 dark:text-gray-400 transition-colors">
-          <span className="material-symbols-outlined">arrow_back</span>
-        </button>
-        <h2 className="text-lg font-bold flex-1 text-center pr-10 text-slate-900 dark:text-white">Serviços</h2>
-      </header>
-      <main className="flex-1 p-4 pb-32 max-w-md mx-auto w-full">
-        <div className="mb-6">
-          <h1 className="text-3xl font-extrabold mb-2 text-slate-900 dark:text-white">Escolha o Serviço</h1>
-          <p className="text-gray-600 dark:text-gray-400 text-sm">Selecione um ou mais serviços para o seu agendamento.</p>
-        </div>
-        <div className="mb-8 space-y-4">
-          <input
-            type="tel"
-            placeholder="(00) 00000-0000"
-            value={booking.customerPhone}
-            onChange={async (e) => {
-              const raw = e.target.value;
-              const formatted = formatPhoneBr(raw);
-              const digits = formatted.replace(/\D/g, '');
+    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen transition-colors">
+      <div className="flex flex-col min-h-screen relative">
+        <header className="sticky top-0 z-20 bg-white/95 dark:bg-background-dark/95 backdrop-blur-sm border-b border-gray-200 dark:border-white/5 flex items-center p-4 transition-colors">
+          <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-600 dark:text-gray-400 transition-colors">
+            <span className="material-symbols-outlined">arrow_back</span>
+          </button>
+          <h2 className="text-lg font-bold flex-1 text-center pr-10 text-slate-900 dark:text-white">Serviços</h2>
+        </header>
+        <main className="flex-1 p-4 pb-32 max-w-md mx-auto w-full">
+          <div className="mb-6">
+            <h1 className="text-3xl font-extrabold mb-2 text-slate-900 dark:text-white">Escolha o Serviço</h1>
+            <p className="text-gray-600 dark:text-gray-400 text-sm">Selecione um ou mais serviços para o seu agendamento.</p>
+          </div>
+          <div className="mb-8 space-y-4">
+            <input
+              type="tel"
+              placeholder="(00) 00000-0000"
+              value={booking.customerPhone}
+              onChange={async (e) => {
+                const raw = e.target.value;
+                const formatted = formatPhoneBr(raw);
+                const digits = formatted.replace(/\D/g, '');
 
-              setBooking(prev => ({ ...prev, customerPhone: formatted }));
+                setBooking(prev => ({ ...prev, customerPhone: formatted }));
 
-              if (digits.length >= 10) {
-                // Now that DB is clean, simple eq('phone', digits) is enough
-                const { data: client } = await supabase.from('clients')
-                  .select('*')
-                  .eq('phone', digits)
-                  .single();
+                if (digits.length >= 10) {
+                  // Now that DB is clean, simple eq('phone', digits) is enough
+                  const { data: client } = await supabase.from('clients')
+                    .select('*')
+                    .eq('phone', digits)
+                    .single();
 
-                if (client) {
-                  // Fetch subscriptions separately to avoid 406 errors with nested joins
-                  const { data: subs } = await supabase.from('user_subscriptions')
-                    .select('*, subscription_plans(*)')
-                    .eq('client_id', client.id);
+                  if (client) {
+                    // Fetch subscriptions separately to avoid 406 errors with nested joins
+                    const { data: subs } = await supabase.from('user_subscriptions')
+                      .select('*, subscription_plans(*)')
+                      .eq('client_id', client.id);
 
-                  const activeSub = subs?.find((s: any) => s.status === 'APPROVED');
-                  let subData;
-                  if (activeSub) {
-                    const plan = activeSub.subscription_plans;
+                    const activeSub = subs?.find((s: any) => s.status === 'APPROVED');
+                    let subData;
+                    if (activeSub) {
+                      const plan = activeSub.subscription_plans;
 
-                    // 1. Fetch Plan services with individual limits
-                    const { data: ps } = await supabase.from('plan_services').select('service_id, monthly_limit').eq('plan_id', plan.id);
-                    const serviceLimits: Record<string, number> = {};
-                    ps?.forEach(s => { serviceLimits[String(s.service_id)] = s.monthly_limit; });
-                    const allowedIds = ps?.map(s => String(s.service_id)) || [];
+                      // 1. Fetch Plan services with individual limits
+                      const { data: ps } = await supabase.from('plan_services').select('service_id, monthly_limit').eq('plan_id', plan.id);
+                      const serviceLimits: Record<string, number> = {};
+                      ps?.forEach(s => { serviceLimits[String(s.service_id)] = s.monthly_limit; });
+                      const allowedIds = ps?.map(s => String(s.service_id)) || [];
 
-                    // 2. Fetch all appointments this month to calculate usage
-                    const startOfMonth = format(new Date(), 'yyyy-MM-01');
-                    const { data: monthApps } = await supabase
-                      .from('appointments')
-                      .select('id, services:appointment_services(service_id)')
-                      .eq('client_id', client.id)
-                      .gte('appointment_date', startOfMonth)
-                      .in('status', ['COMPLETED', 'PENDING']);
+                      // 2. Fetch all appointments this month to calculate usage
+                      const startOfMonth = format(new Date(), 'yyyy-MM-01');
+                      const { data: monthApps } = await supabase
+                        .from('appointments')
+                        .select('id, services:appointment_services(service_id)')
+                        .eq('client_id', client.id)
+                        .gte('appointment_date', startOfMonth)
+                        .in('status', ['COMPLETED', 'PENDING']);
 
-                    // 3. Fetch Service Component mapping to "unpack" combos
-                    const { data: sc } = await supabase.from('service_components').select('*');
-                    const componentsMap: Record<string, string[]> = {};
-                    sc?.forEach(item => {
-                      if (!componentsMap[String(item.parent_service_id)]) componentsMap[String(item.parent_service_id)] = [];
-                      componentsMap[String(item.parent_service_id)].push(String(item.component_service_id));
-                    });
-
-                    // 4. Calculate real usage per service ID
-                    const usage: Record<string, number> = {};
-                    monthApps?.forEach(app => {
-                      const appServices = app.services || [];
-                      appServices.forEach((s: any) => {
-                        const sId = String(s.service_id);
-                        // Increment specific service usage
-                        usage[sId] = (usage[sId] || 0) + 1;
-
-                        if (componentsMap[sId]) {
-                          // It is a combo, increment components too
-                          componentsMap[sId].forEach(compId => {
-                            usage[compId] = (usage[compId] || 0) + 1;
-                          });
-                        }
+                      // 3. Fetch Service Component mapping to "unpack" combos
+                      const { data: sc } = await supabase.from('service_components').select('*');
+                      const componentsMap: Record<string, string[]> = {};
+                      sc?.forEach(item => {
+                        if (!componentsMap[String(item.parent_service_id)]) componentsMap[String(item.parent_service_id)] = [];
+                        componentsMap[String(item.parent_service_id)].push(String(item.component_service_id));
                       });
-                    });
 
-                    subData = {
-                      planName: plan?.name || 'Assinatura',
-                      cutsUsed: monthApps?.length || 0, // Keep for legacy if needed
-                      cutsLimit: plan?.monthly_limit || 0, // Keep for legacy
-                      serviceLimits,
-                      serviceUsage: usage,
-                      allowedServices: allowedIds,
-                      isActive: true
-                    };
+                      // 4. Calculate real usage per service ID
+                      const usage: Record<string, number> = {};
+                      monthApps?.forEach(app => {
+                        const appServices = app.services || [];
+                        appServices.forEach((s: any) => {
+                          const sId = String(s.service_id);
+                          // Increment specific service usage
+                          usage[sId] = (usage[sId] || 0) + 1;
+
+                          if (componentsMap[sId]) {
+                            // It is a combo, increment components too
+                            componentsMap[sId].forEach(compId => {
+                              usage[compId] = (usage[compId] || 0) + 1;
+                            });
+                          }
+                        });
+                      });
+
+                      subData = {
+                        planName: plan?.name || 'Assinatura',
+                        cutsUsed: monthApps?.length || 0, // Keep for legacy if needed
+                        cutsLimit: plan?.monthly_limit || 0, // Keep for legacy
+                        serviceLimits,
+                        serviceUsage: usage,
+                        allowedServices: allowedIds,
+                        isActive: true
+                      };
+                    }
+                    setBooking(prev => ({
+                      ...prev,
+                      customerName: client.name,
+                      birthDate: client.birth_date,
+                      clientSubscription: subData
+                    }));
+                  } else {
+                    setBooking(prev => ({ ...prev, clientSubscription: undefined }));
                   }
-                  setBooking(prev => ({
-                    ...prev,
-                    customerName: client.name,
-                    clientSubscription: subData
-                  }));
                 } else {
                   setBooking(prev => ({ ...prev, clientSubscription: undefined }));
                 }
-              } else {
-                setBooking(prev => ({ ...prev, clientSubscription: undefined }));
-              }
-            }}
-            className="w-full rounded-lg bg-white dark:bg-surface-dark border border-gray-200 dark:border-white/10 px-4 py-3 text-sm text-slate-900 dark:text-white focus:ring-primary focus:border-primary placeholder:text-gray-400"
-          />
-          {booking.clientSubscription?.isActive && (
-            <div className="bg-primary-dark/10 border border-primary-dark/20 p-3 rounded-xl flex items-center justify-between animate-fade-in transition-colors">
-              <div className="flex items-center gap-2 text-primary-dark dark:text-primary-dark/80">
-                <span className="material-symbols-outlined filled">crown</span>
-                <span className="text-sm font-bold">{booking.clientSubscription.planName}</span>
+              }}
+              className="w-full rounded-lg bg-white dark:bg-surface-dark border border-gray-200 dark:border-white/10 px-4 py-3 text-sm text-slate-900 dark:text-white focus:ring-primary focus:border-primary placeholder:text-gray-400"
+            />
+            {booking.clientSubscription?.isActive && (
+              <div className="bg-primary-dark/10 border border-primary-dark/20 p-3 rounded-xl flex items-center justify-between animate-fade-in transition-colors">
+                <div className="flex items-center gap-2 text-primary-dark dark:text-primary-dark/80">
+                  <span className="material-symbols-outlined filled">crown</span>
+                  <span className="text-sm font-bold">{booking.clientSubscription.planName}</span>
+                </div>
+                <span className="text-xs font-bold text-primary-dark dark:text-primary-dark/70 uppercase tracking-wider">
+                  Plano Ativo
+                </span>
               </div>
-              <span className="text-xs font-bold text-primary-dark dark:text-primary-dark/70 uppercase tracking-wider">
-                Plano Ativo
+            )}
+            <input
+              type="text"
+              placeholder="Seu nome completo"
+              value={booking.customerName}
+              onChange={(e) => setBooking({ ...booking, customerName: e.target.value })}
+              className="w-full rounded-lg bg-white dark:bg-surface-dark border border-gray-200 dark:border-white/10 px-4 py-3 text-sm text-slate-900 dark:text-white focus:ring-primary focus:border-primary placeholder:text-gray-400"
+            />
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Data de Nascimento (Opcional)</label>
+              <input
+                type="date"
+                value={booking.birthDate || ''}
+                onChange={(e) => setBooking({ ...booking, birthDate: e.target.value })}
+                className="w-full rounded-lg bg-white dark:bg-surface-dark border border-gray-200 dark:border-white/10 px-4 py-3 text-sm text-slate-900 dark:text-white focus:ring-primary focus:border-primary"
+              />
+              <p className="text-[9px] text-gray-400 px-1 italic">Cadastre para ganhar mimos no seu aniversário!</p>
+            </div>
+          </div>
+          <div className="space-y-4">
+            {(() => {
+              const filtered = services.filter(s => String(s.category_id) === String(booking.selectedCategory?.id));
+              const prioritized = [...filtered].sort((a, b) => {
+                const aAllowed = booking.clientSubscription?.isActive && booking.clientSubscription.allowedServices?.includes(a.id);
+                const bAllowed = booking.clientSubscription?.isActive && booking.clientSubscription.allowedServices?.includes(b.id);
+                if (aAllowed && !bAllowed) return -1;
+                if (!aAllowed && bAllowed) return 1;
+                return 0;
+              });
+              return prioritized.map(service => (
+                <label key={service.id} className={`relative flex gap-4 p-4 rounded-xl bg-white dark:bg-surface-dark border transition-all cursor-pointer ${booking.selectedServices.some(s => s.id === service.id) ? 'border-primary' : 'border-gray-200 dark:border-transparent'} shadow-sm hover:shadow-md`}>
+                  <div className="size-20 rounded-lg overflow-hidden bg-gray-200 dark:bg-gray-800 shrink-0">
+                    <img
+                      src={service.imageUrl}
+                      onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.classList.add('flex', 'items-center', 'justify-center'); e.currentTarget.parentElement!.innerHTML = '<span class="material-symbols-outlined text-gray-400">image_not_supported</span>'; }}
+                      className="w-full h-full object-cover"
+                      alt={service.name}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">{service.name}</h3>
+                    <p className="text-gray-500 dark:text-gray-400 text-xs line-clamp-2 mt-1">{service.description}</p>
+                    <div className="flex justify-between mt-2">
+                      <span className="text-primary font-bold text-sm">
+                        {(() => {
+                          const isSub = booking.clientSubscription?.isActive;
+                          const isAllowed = booking.clientSubscription?.allowedServices?.includes(service.id);
+
+                          if (isSub && isAllowed) {
+                            return (
+                              <span className="text-amber-600 dark:text-amber-500 flex items-center gap-1">
+                                <span className="material-symbols-outlined text-sm filled">check_circle</span>
+                                {(() => {
+                                  const isSelected = booking.selectedServices.some(s => s.id === service.id);
+
+                                  // Check if it's a combo or individual
+                                  // For simplicity in the UI counter, we show the status of the service itself IF it has a direct limit
+                                  // OR if it's a combo, we could show something more complex, but let's stick to the "basic" service limit for now.
+                                  const limit = booking.clientSubscription!.serviceLimits[service.id] || 0;
+                                  const currentUsed = booking.clientSubscription!.serviceUsage[service.id] || 0;
+
+                                  if (limit > 0) {
+                                    let available = limit - currentUsed;
+                                    if (isSelected) {
+                                      const selectedCountBefore = booking.selectedServices
+                                        .slice(0, booking.selectedServices.findIndex(s => s.id === service.id))
+                                        .filter(s => s.id === service.id).length;
+                                      available = Math.max(0, available - (selectedCountBefore + 1));
+                                    }
+                                    return `${available}/${limit}`;
+                                  }
+                                  return "Incluso";
+                                })()}
+                              </span>
+                            );
+                          }
+                          return `R$ ${service.price.toFixed(2)}`;
+                        })()}
+                      </span>
+                      <span className="text-gray-500 text-xs flex items-center gap-1"><span className="material-symbols-outlined text-sm">schedule</span> {service.duration} min</span>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={booking.selectedServices.some(s => s.id === service.id)}
+                    onChange={() => toggleService(service)}
+                    className="hidden"
+                  />
+                </label>
+              ));
+            })()}
+          </div>
+        </main>
+        <footer className="fixed bottom-0 w-full bg-white/95 dark:bg-surface-dark/95 backdrop-blur-lg border-t border-gray-100 dark:border-white/5 p-5 pb-8 transition-colors">
+          <div className="max-w-md mx-auto flex items-center justify-between gap-4">
+            <div className="flex flex-col">
+              <span className="text-gray-500 dark:text-gray-400 text-xs uppercase font-bold tracking-tighter">
+                Total estimado
+              </span>
+              <span className="text-2xl font-bold text-primary">
+                {(() => {
+                  const sub = booking.clientSubscription;
+                  if (!sub?.isActive) return `R$ ${totalPrice.toFixed(2)}`;
+                  // Calculate real cost: free for plan services within limit, price for others
+                  const limits = sub.serviceLimits || {};
+                  const usage = { ...(sub.serviceUsage || {}) };
+                  const price = booking.selectedServices.reduce((sum, s) => {
+                    const limit = limits[s.id];
+                    if (limit !== undefined && limit > 0) {
+                      const used = usage[s.id] || 0;
+                      if (used < limit) { usage[s.id] = used + 1; return sum; }
+                    }
+                    return sum + s.price;
+                  }, 0);
+                  return `R$ ${price.toFixed(2)}`;
+                })()}
               </span>
             </div>
-          )}
-          <input
-            type="text"
-            placeholder="Seu nome completo"
-            value={booking.customerName}
-            onChange={(e) => setBooking({ ...booking, customerName: e.target.value })}
-            className="w-full rounded-lg bg-white dark:bg-surface-dark border border-gray-200 dark:border-white/10 px-4 py-3 text-sm text-slate-900 dark:text-white focus:ring-primary focus:border-primary placeholder:text-gray-400"
-          />
-        </div>
-        <div className="space-y-4">
-          {(() => {
-            const prioritized = [...services].sort((a, b) => {
-              const aAllowed = booking.clientSubscription?.isActive && booking.clientSubscription.allowedServices?.includes(a.id);
-              const bAllowed = booking.clientSubscription?.isActive && booking.clientSubscription.allowedServices?.includes(b.id);
-              if (aAllowed && !bAllowed) return -1;
-              if (!aAllowed && bAllowed) return 1;
-              return 0;
-            });
-            return prioritized.map(service => (
-              <label key={service.id} className={`relative flex gap-4 p-4 rounded-xl bg-white dark:bg-surface-dark border transition-all cursor-pointer ${booking.selectedServices.some(s => s.id === service.id) ? 'border-primary' : 'border-gray-200 dark:border-transparent'} shadow-sm hover:shadow-md`}>
-                <div className="size-20 rounded-lg overflow-hidden bg-gray-200 dark:bg-gray-800 shrink-0">
-                  <img
-                    src={service.imageUrl}
-                    onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.classList.add('flex', 'items-center', 'justify-center'); e.currentTarget.parentElement!.innerHTML = '<span class="material-symbols-outlined text-gray-400">image_not_supported</span>'; }}
-                    className="w-full h-full object-cover"
-                    alt={service.name}
-                  />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white">{service.name}</h3>
-                  <p className="text-gray-500 dark:text-gray-400 text-xs line-clamp-2 mt-1">{service.description}</p>
-                  <div className="flex justify-between mt-2">
-                    <span className="text-primary font-bold text-sm">
-                      {(() => {
-                        const isSub = booking.clientSubscription?.isActive;
-                        const isAllowed = booking.clientSubscription?.allowedServices?.includes(service.id);
-
-                        if (isSub && isAllowed) {
-                          return (
-                            <span className="text-amber-600 dark:text-amber-500 flex items-center gap-1">
-                              <span className="material-symbols-outlined text-sm filled">check_circle</span>
-                              {(() => {
-                                const isSelected = booking.selectedServices.some(s => s.id === service.id);
-
-                                // Check if it's a combo or individual
-                                // For simplicity in the UI counter, we show the status of the service itself IF it has a direct limit
-                                // OR if it's a combo, we could show something more complex, but let's stick to the "basic" service limit for now.
-                                const limit = booking.clientSubscription!.serviceLimits[service.id] || 0;
-                                const currentUsed = booking.clientSubscription!.serviceUsage[service.id] || 0;
-
-                                if (limit > 0) {
-                                  let available = limit - currentUsed;
-                                  if (isSelected) {
-                                    const selectedCountBefore = booking.selectedServices
-                                      .slice(0, booking.selectedServices.findIndex(s => s.id === service.id))
-                                      .filter(s => s.id === service.id).length;
-                                    available = Math.max(0, available - (selectedCountBefore + 1));
-                                  }
-                                  return `${available}/${limit}`;
-                                }
-                                return "Incluso";
-                              })()}
-                            </span>
-                          );
-                        }
-                        return `R$ ${service.price.toFixed(2)}`;
-                      })()}
-                    </span>
-                    <span className="text-gray-500 text-xs flex items-center gap-1"><span className="material-symbols-outlined text-sm">schedule</span> {service.duration} min</span>
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={booking.selectedServices.some(s => s.id === service.id)}
-                  onChange={() => toggleService(service)}
-                  className="hidden"
-                />
-              </label>
-            ));
-          })()}
-        </div>
-      </main>
-      <footer className="fixed bottom-0 w-full bg-white/95 dark:bg-surface-dark/95 backdrop-blur-lg border-t border-gray-100 dark:border-white/5 p-5 pb-8 transition-colors">
-        <div className="max-w-md mx-auto flex items-center justify-between gap-4">
-          <div className="flex flex-col">
-            <span className="text-gray-500 dark:text-gray-400 text-xs uppercase font-bold tracking-tighter">
-              Total estimado
-            </span>
-            <span className="text-2xl font-bold text-primary">
-              {(() => {
-                const sub = booking.clientSubscription;
-                if (!sub?.isActive) return `R$ ${totalPrice.toFixed(2)}`;
-                // Calculate real cost: free for plan services within limit, price for others
-                const limits = sub.serviceLimits || {};
-                const usage = { ...(sub.serviceUsage || {}) };
-                const price = booking.selectedServices.reduce((sum, s) => {
-                  const limit = limits[s.id];
-                  if (limit !== undefined && limit > 0) {
-                    const used = usage[s.id] || 0;
-                    if (used < limit) { usage[s.id] = used + 1; return sum; }
-                  }
-                  return sum + s.price;
-                }, 0);
-                return `R$ ${price.toFixed(2)}`;
-              })()}
-            </span>
+            <button
+              disabled={booking.selectedServices.length === 0 || !booking.customerName}
+              onClick={onNext}
+              className="flex-1 bg-primary text-white font-bold py-3.5 px-6 rounded-lg shadow-lg disabled:opacity-50"
+            >
+              Continuar
+            </button>
           </div>
-          <button
-            disabled={booking.selectedServices.length === 0 || !booking.customerName}
-            onClick={onNext}
-            className="flex-1 bg-primary text-white font-bold py-3.5 px-6 rounded-lg shadow-lg disabled:opacity-50"
-          >
-            Continuar
-          </button>
-        </div>
-      </footer>
+        </footer>
+      </div>
     </div>
   );
 };
@@ -718,12 +838,20 @@ const SelectDateTimeScreen: React.FC<{
 
   useEffect(() => {
     const initData = async () => {
-      // Fetch Work Hours
-      const { data: wh } = await supabase.from('work_hours').select('*');
+      // Fetch Work Hours for the professional
+      let whQuery = supabase.from('work_hours').select('*');
+      if (booking.selectedProfessional) {
+        whQuery = whQuery.eq('professional_id', booking.selectedProfessional.id);
+      }
+      const { data: wh } = await whQuery;
       if (wh) setWorkHours(wh);
 
-      // Fetch Blocks
-      const { data: blocks } = await supabase.from('blocked_slots').select('*');
+      // Fetch Blocks for the professional
+      let blocksQuery = supabase.from('blocked_slots').select('*');
+      if (booking.selectedProfessional) {
+        blocksQuery = blocksQuery.eq('professional_id', booking.selectedProfessional.id);
+      }
+      const { data: blocks } = await blocksQuery;
       if (blocks) {
         setBlockedSlots(blocks.map((b: any) => ({
           ...b,
@@ -731,15 +859,15 @@ const SelectDateTimeScreen: React.FC<{
         })));
       }
 
-      // Fetch Appointments with Service Durations
-      const { data: apps } = await supabase
-        .from('appointments')
-        .select('*, services:appointment_services(service:services(duration))')
-        .neq('status', 'CANCELLED');
+      // Fetch Appointments for the professional
+      let appsQuery = supabase.from('appointments').select('*, services:appointment_services(service:services(duration))').neq('status', 'CANCELLED');
+      if (booking.selectedProfessional) {
+        appsQuery = appsQuery.eq('professional_id', booking.selectedProfessional.id);
+      }
+      const { data: apps } = await appsQuery;
 
       if (apps) {
         setExistingAppointments(apps.map((a: any) => {
-          // Calculate total duration for this existing appointment
           const totalDuration = a.services?.reduce((sum: number, item: any) => sum + (item.service?.duration || 30), 0) || 30;
           return {
             ...a,
@@ -860,55 +988,62 @@ const SelectDateTimeScreen: React.FC<{
   };
 
   return (
-    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col transition-colors">
-      <header className="p-4 border-b border-gray-200 dark:border-white/5 bg-white dark:bg-background-dark flex items-center justify-between transition-colors">
-        <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-400"><span className="material-symbols-outlined">arrow_back</span></button>
-        <span className="font-bold text-slate-900 dark:text-white">Escolha o Horário</span>
-        <div className="size-10"></div>
-      </header>
-      <main className="p-6">
-        <h3 className="text-slate-900 dark:text-white font-bold mb-4">Dias Disponíveis</h3>
-        <div className="flex gap-3 overflow-x-auto no-scrollbar pb-4 mb-6">
-          {nextDays.map((d, i) => (
-            <button
-              key={i}
-              onClick={() => setSelectedDateIndex(i)}
-              className={`min-w-[70px] p-3 rounded-2xl border flex flex-col items-center gap-1 transition-all ${selectedDateIndex === i
-                ? 'bg-primary border-primary text-white shadow-lg shadow-primary/20'
-                : 'bg-white dark:bg-surface-dark border-gray-200 dark:border-white/5 text-gray-400 hover:border-gray-300 dark:hover:border-white/20'
-                }`}
-            >
-              <span className="text-[10px] font-bold uppercase">{d.weekDay}</span>
-              <span className="text-xl font-bold">{d.dayNum}</span>
-            </button>
-          ))}
-        </div>
+    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen transition-colors">
+      <div className="flex flex-col min-h-screen relative">
+        <header className="sticky top-0 z-20 bg-white/95 dark:bg-background-dark/95 backdrop-blur-sm border-b border-gray-200 dark:border-white/5 flex items-center p-4 transition-colors">
+          <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-600 dark:text-gray-400 transition-colors">
+            <span className="material-symbols-outlined">arrow_back</span>
+          </button>
+          <h2 className="text-lg font-bold flex-1 text-center pr-10 text-slate-900 dark:text-white">Horário</h2>
+        </header>
 
-        <h3 className="text-slate-900 dark:text-white font-bold mb-4">Horários Livres</h3>
-        <div className="grid grid-cols-4 gap-3">
-          {availableTimes.map((t) => (
+        <main className="flex-1 p-6 max-w-md mx-auto w-full">
+          <h3 className="text-slate-900 dark:text-white font-bold mb-4">Dias Disponíveis</h3>
+          <div className="flex gap-3 overflow-x-auto no-scrollbar pb-4 mb-6">
+            {nextDays.map((d, i) => (
+              <button
+                key={i}
+                onClick={() => setSelectedDateIndex(i)}
+                className={`min-w-[70px] p-3 rounded-2xl border flex flex-col items-center gap-1 transition-all ${selectedDateIndex === i
+                  ? 'bg-primary border-primary text-white shadow-lg shadow-primary/20'
+                  : 'bg-white dark:bg-surface-dark border-gray-200 dark:border-white/5 text-gray-400 hover:border-gray-300 dark:hover:border-white/20'
+                  }`}
+              >
+                <span className="text-[10px] font-bold uppercase">{d.weekDay}</span>
+                <span className="text-xl font-bold">{d.dayNum}</span>
+              </button>
+            ))}
+          </div>
+
+          <h3 className="text-slate-900 dark:text-white font-bold mb-4">Horários Livres</h3>
+          <div className="grid grid-cols-4 gap-3">
+            {availableTimes.map((t) => (
+              <button
+                key={t}
+                onClick={() => handleTimeSelect(t)}
+                className={`p-3 rounded-xl border font-bold text-sm transition-all ${booking.selectedTime === t && booking.selectedDate === nextDays[selectedDateIndex].dateStr
+                  ? 'bg-slate-900 dark:bg-white text-white dark:text-black border-slate-900 dark:border-white'
+                  : 'bg-white dark:bg-surface-dark border-gray-200 dark:border-white/5 text-slate-900 dark:text-white hover:border-gray-300 dark:hover:border-white/20'
+                  }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </main>
+
+        <footer className="sticky bottom-0 w-full bg-white/95 dark:bg-surface-dark/95 backdrop-blur-lg border-t border-gray-100 dark:border-white/5 p-5 pb-8 transition-colors mt-auto">
+          <div className="max-w-md mx-auto">
             <button
-              key={t}
-              onClick={() => handleTimeSelect(t)}
-              className={`p-3 rounded-xl border font-bold text-sm transition-all ${booking.selectedTime === t && booking.selectedDate === nextDays[selectedDateIndex].dateStr
-                ? 'bg-slate-900 dark:bg-white text-white dark:text-black border-slate-900 dark:border-white'
-                : 'bg-white dark:bg-surface-dark border-gray-200 dark:border-white/5 text-slate-900 dark:text-white hover:border-gray-300 dark:hover:border-white/20'
-                }`}
+              onClick={onNext}
+              disabled={!booking.selectedTime}
+              className="w-full bg-primary disabled:opacity-50 disabled:cursor-not-allowed text-white py-4 rounded-xl font-bold shadow-lg shadow-primary/20"
             >
-              {t}
+              Continuar
             </button>
-          ))}
-        </div>
-      </main>
-      <footer className="p-4 mt-auto border-t border-gray-200 dark:border-white/5 bg-white dark:bg-background-dark transition-colors">
-        <button
-          onClick={onNext}
-          disabled={!booking.selectedTime}
-          className="w-full bg-primary disabled:opacity-50 disabled:cursor-not-allowed text-white py-4 rounded-xl font-bold shadow-lg shadow-primary/20"
-        >
-          Continuar
-        </button>
-      </footer>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 };
@@ -1109,10 +1244,16 @@ const AdminFinanceScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   return (
     <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col transition-colors print:bg-white print:p-0">
-      <header className="sticky top-0 z-50 p-4 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 flex items-center justify-between backdrop-blur-md transition-colors print:hidden">
-        <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400"><span className="material-symbols-outlined">arrow_back</span></button>
-        <h2 className="font-bold text-slate-900 dark:text-white">Financeiro Avançado</h2>
-        <button onClick={handlePrint} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400"><span className="material-symbols-outlined">print</span></button>
+      <header className="sticky top-0 z-50 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md transition-colors print:hidden">
+        <div className="max-w-4xl mx-auto w-full flex items-center justify-between p-4">
+          <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400 font-bold transition-colors">
+            <span className="material-symbols-outlined">arrow_back</span>
+          </button>
+          <h2 className="font-bold text-slate-900 dark:text-white">Financeiro Avançado</h2>
+          <button onClick={handlePrint} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400 font-bold transition-colors">
+            <span className="material-symbols-outlined">print</span>
+          </button>
+        </div>
       </header>
 
       <main className="p-4 space-y-6 max-w-4xl mx-auto w-full pb-24 print:max-w-none print:pb-0">
@@ -1352,10 +1493,14 @@ const AdminBlockScheduleScreen: React.FC<{ onBack: () => void }> = ({ onBack }) 
 
   return (
     <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col transition-colors">
-      <header className="sticky top-0 z-50 p-4 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 flex items-center justify-between backdrop-blur-md transition-colors">
-        <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400"><span className="material-symbols-outlined">arrow_back</span></button>
-        <h2 className="font-bold text-slate-900 dark:text-white">Bloquear Agenda</h2>
-        <div className="size-10"></div>
+      <header className="sticky top-0 z-50 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md transition-colors">
+        <div className="max-w-md mx-auto w-full flex items-center justify-between p-4">
+          <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400 font-bold transition-colors">
+            <span className="material-symbols-outlined">arrow_back</span>
+          </button>
+          <h2 className="font-bold text-slate-900 dark:text-white">Bloquear Agenda</h2>
+          <div className="size-10"></div>
+        </div>
       </header>
       <main className="p-4 space-y-6 max-w-md mx-auto w-full">
         <div className="bg-white dark:bg-surface-dark p-4 rounded-xl space-y-3 border border-gray-200 dark:border-white/10 transition-colors">
@@ -1420,88 +1565,100 @@ const ReviewScreen: React.FC<{
 
   const hasFreeServices = Object.values(serviceIsFree).some(v => v);
   return (
-    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col pb-24 transition-colors">
-      <header className="sticky top-0 z-50 flex items-center p-4 bg-white/95 dark:bg-background-dark/95 border-b border-gray-200 dark:border-white/5 transition-colors">
-        <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10">
-          <span className="material-symbols-outlined text-gray-600 dark:text-white">arrow_back_ios_new</span>
-        </button>
-        <h2 className="text-lg font-bold flex-1 text-center pr-10 text-slate-900 dark:text-white">Revisar Agendamento</h2>
-      </header>
-      <main className="p-4 space-y-6 max-w-md mx-auto w-full">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Confira os detalhes</h1>
-          <p className="text-sm text-gray-500 mt-1">Verifique as informações antes de confirmar.</p>
-        </div>
-        <section className="bg-white dark:bg-surface-dark rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm">
-          <div className="p-4 flex gap-4 items-center">
-            <div className="size-12 bg-blue-500/10 text-blue-500 rounded-xl flex items-center justify-center"><span className="material-symbols-outlined">person</span></div>
-            <div>
-              <span className="text-[10px] text-gray-500 uppercase font-bold">Cliente</span>
-              <p className="font-medium text-sm text-slate-900 dark:text-white">{booking.customerName} • {booking.customerPhone}</p>
-              {booking.clientSubscription?.isActive && (
-                <div className="flex items-center gap-1 text-primary-dark font-bold text-[10px] mt-0.5">
-                  <span className="material-symbols-outlined text-[12px] filled">crown</span>
-                  {booking.clientSubscription.planName}
-                </div>
-              )}
-            </div>
+    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen transition-colors">
+      <div className="flex flex-col min-h-screen relative pb-24">
+        <header className="sticky top-0 z-50 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md border-b border-gray-200 dark:border-white/5 transition-colors">
+          <div className="max-w-md mx-auto w-full flex items-center p-4">
+            <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
+              <span className="material-symbols-outlined text-gray-600 dark:text-white">arrow_back_ios_new</span>
+            </button>
+            <h2 className="text-lg font-bold flex-1 text-center pr-10 text-slate-900 dark:text-white">Revisar Agendamento</h2>
           </div>
-          <div className="p-4 flex gap-4 items-center border-t border-gray-100 dark:border-white/5 transition-colors">
-            <div className="size-12 bg-primary/10 text-primary rounded-xl flex items-center justify-center"><span className="material-symbols-outlined">calendar_month</span></div>
-            <div>
-              <span className="text-[10px] text-gray-500 uppercase font-bold">Data e Hora</span>
-              <p className="font-medium text-sm text-slate-900 dark:text-white">{formatDateToBRL(booking.selectedDate)} • {booking.selectedTime}</p>
-            </div>
+        </header>
+        <main className="p-4 space-y-6 max-w-md mx-auto w-full">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Confira os detalhes</h1>
+            <p className="text-sm text-gray-500 mt-1">Verifique as informações antes de confirmar.</p>
           </div>
-        </section>
-        <section className="bg-white dark:bg-surface-dark rounded-2xl border border-gray-200 dark:border-white/5 p-5 shadow-sm transition-colors">
-          <h3 className="text-sm font-bold mb-4 flex items-center gap-2 uppercase tracking-wider text-slate-900 dark:text-white"><span className="material-symbols-outlined text-primary text-xl">receipt_long</span> Resumo</h3>
-          <div className="space-y-4">
-            {booking.selectedServices.map((s, idx) => (
-              <div key={s.id} className="flex justify-between text-sm text-slate-900 dark:text-white">
-                <div>
-                  <p className="font-bold">{s.name}</p>
-                  <span className="text-xs text-gray-500">{s.duration} min</span>
-                </div>
-                {serviceIsFree[s.id] ? (
-                  <p className="font-bold text-primary-dark">
-                    {(() => {
-                      const limit = serviceLimits[s.id] || 0;
-                      // count how many of this service come before (idx) in the selected list
-                      const idxInSelection = booking.selectedServices.slice(0, idx).filter(sv => sv.id === s.id).length;
-                      const used = serviceUsage[s.id] || 0;
-                      return limit > 0 ? `${used + idxInSelection + 1}/${limit}` : 'Incluso';
-                    })()}
-                  </p>
-                ) : (
-                  <p className="font-bold">R$ {s.price.toFixed(2)}</p>
+          <section className="bg-white dark:bg-surface-dark rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm">
+            <div className="p-4 flex gap-4 items-center">
+              <div className="size-12 bg-blue-500/10 text-blue-500 rounded-xl flex items-center justify-center"><span className="material-symbols-outlined">person</span></div>
+              <div>
+                <span className="text-[10px] text-gray-500 uppercase font-bold">Cliente</span>
+                <p className="font-medium text-sm text-slate-900 dark:text-white">{booking.customerName} • {booking.customerPhone}</p>
+                {booking.clientSubscription?.isActive && (
+                  <div className="flex items-center gap-1 text-primary-dark font-bold text-[10px] mt-0.5">
+                    <span className="material-symbols-outlined text-[12px] filled">crown</span>
+                    {booking.clientSubscription.planName}
+                  </div>
                 )}
               </div>
-            ))}
-          </div>
-          <div className="mt-6 pt-4 border-t border-gray-100 dark:border-white/5 flex justify-between items-center transition-colors">
-            <span className="font-bold text-slate-900 dark:text-white">Total</span>
-            <div className="text-right">
-              {isSubscriber && hasFreeServices ? (
-                <>
-                  <p className="text-[10px] text-primary-dark font-bold uppercase tracking-widest mb-1">Assinatura Ativa</p>
-                  <span className="text-xl font-black text-primary-dark">
-                    {totalPrice === 0 ? 'Incluso na Assinatura' : `R$ ${totalPrice.toFixed(2)} (parcial)`}
-                  </span>
-                </>
-              ) : (
-                <span className="text-2xl font-black text-primary">R$ {totalPrice.toFixed(2)}</span>
-              )}
             </div>
+            <div className="p-4 flex gap-4 items-center border-t border-gray-100 dark:border-white/5 transition-colors">
+              <div className="size-12 bg-primary/10 text-primary rounded-xl flex items-center justify-center"><span className="material-symbols-outlined">calendar_month</span></div>
+              <div>
+                <span className="text-[10px] text-gray-500 uppercase font-bold">Data e Hora</span>
+                <p className="font-medium text-sm text-slate-900 dark:text-white">{formatDateToBRL(booking.selectedDate)} • {booking.selectedTime}</p>
+              </div>
+            </div>
+            <div className="p-4 flex gap-4 items-center border-t border-gray-100 dark:border-white/5 transition-colors">
+              <div className="size-12 bg-purple-500/10 text-purple-500 rounded-xl flex items-center justify-center"><span className="material-symbols-outlined">content_cut</span></div>
+              <div>
+                <span className="text-[10px] text-gray-500 uppercase font-bold">Profissional</span>
+                <p className="font-medium text-sm text-slate-900 dark:text-white">{booking.selectedProfessional?.name || 'Tanto faz (Qualquer um)'}</p>
+              </div>
+            </div>
+          </section>
+          <section className="bg-white dark:bg-surface-dark rounded-2xl border border-gray-200 dark:border-white/5 p-5 shadow-sm transition-colors">
+            <h3 className="text-sm font-bold mb-4 flex items-center gap-2 uppercase tracking-wider text-slate-900 dark:text-white"><span className="material-symbols-outlined text-primary text-xl">receipt_long</span> Resumo</h3>
+            <div className="space-y-4">
+              {booking.selectedServices.map((s, idx) => (
+                <div key={s.id} className="flex justify-between text-sm text-slate-900 dark:text-white">
+                  <div>
+                    <p className="font-bold">{s.name}</p>
+                    <span className="text-xs text-gray-500">{s.duration} min</span>
+                  </div>
+                  {serviceIsFree[s.id] ? (
+                    <p className="font-bold text-primary-dark">
+                      {(() => {
+                        const limit = serviceLimits[s.id] || 0;
+                        const idxInSelection = booking.selectedServices.slice(0, idx).filter(sv => sv.id === s.id).length;
+                        const used = serviceUsage[s.id] || 0;
+                        return limit > 0 ? `${used + idxInSelection + 1}/${limit}` : 'Incluso';
+                      })()}
+                    </p>
+                  ) : (
+                    <p className="font-bold">R$ {s.price.toFixed(2)}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="mt-6 pt-4 border-t border-gray-100 dark:border-white/5 flex justify-between items-center transition-colors">
+              <span className="font-bold text-slate-900 dark:text-white">Total</span>
+              <div className="text-right">
+                {isSubscriber && hasFreeServices ? (
+                  <>
+                    <p className="text-[10px] text-primary-dark font-bold uppercase tracking-widest mb-1">Assinatura Ativa</p>
+                    <span className="text-xl font-black text-primary-dark">
+                      {totalPrice === 0 ? 'Incluso na Assinatura' : `R$ ${totalPrice.toFixed(2)} (parcial)`}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-2xl font-black text-primary">R$ {totalPrice.toFixed(2)}</span>
+                )}
+              </div>
+            </div>
+          </section>
+        </main>
+        <footer className="fixed bottom-0 w-full p-4 bg-white/95 dark:bg-background-dark border-t border-gray-200 dark:border-white/5 z-40 transition-colors">
+          <div className="max-w-md mx-auto">
+            <button onClick={onConfirm} className="w-full bg-primary h-14 rounded-2xl text-white font-bold text-lg flex items-center justify-center gap-2 group shadow-lg shadow-primary/20 active:scale-[0.98] transition-all">
+              <span>Confirmar Agendamento</span>
+              <span className="material-symbols-outlined group-hover:translate-x-1 transition-transform">arrow_forward</span>
+            </button>
           </div>
-        </section>
-      </main>
-      <footer className="fixed bottom-0 w-full p-4 bg-white/95 dark:bg-background-dark border-t border-gray-200 dark:border-white/5 z-40 transition-colors">
-        <button onClick={onConfirm} className="w-full bg-primary h-14 rounded-2xl text-white font-bold text-lg flex items-center justify-center gap-2 group shadow-lg shadow-primary/20 active:scale-[0.98] transition-all">
-          <span>Confirmar Agendamento</span>
-          <span className="material-symbols-outlined group-hover:translate-x-1 transition-transform">arrow_forward</span>
-        </button>
-      </footer>
+        </footer>
+      </div>
     </div>
   );
 };
@@ -1547,107 +1704,116 @@ const MyAppointmentsScreen: React.FC<{
   }, [appointments, activeTab]);
 
   return (
-    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col transition-colors">
-      <header className="sticky top-0 z-20 p-4 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 flex items-center transition-colors">
-        <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10"><span className="material-symbols-outlined text-gray-600 dark:text-white">arrow_back_ios_new</span></button>
-        <h1 className="text-lg font-bold flex-1 text-center pr-10 text-slate-900 dark:text-white">Meus Agendamentos</h1>
-      </header>
-      <main className="p-4 space-y-6 max-w-md mx-auto w-full flex-1">
-        <div className="flex bg-gray-100 dark:bg-surface-dark p-1 rounded-xl transition-colors">
-          <button
-            onClick={() => setActiveTab('upcoming')}
-            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${activeTab === 'upcoming' ? 'bg-primary text-white shadow-sm' : 'text-gray-500'}`}
-          >
-            Próximos
-          </button>
-          <button
-            onClick={() => setActiveTab('past')}
-            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${activeTab === 'past' ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm' : 'text-gray-500'}`}
-          >
-            Anteriores
-          </button>
-        </div>
-        <section>
-          <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 dark:text-white">
-            <span className="material-symbols-outlined text-primary">calendar_today</span>
-            {activeTab === 'upcoming' ? 'Agendamentos Futuros' : 'Histórico'}
-          </h2>
+    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen transition-colors">
+      <div className="flex flex-col min-h-screen relative">
+        <header className="sticky top-0 z-20 bg-white/95 dark:bg-background-dark/95 backdrop-blur-sm border-b border-gray-200 dark:border-white/5 transition-colors">
+          <div className="max-w-md mx-auto w-full flex items-center p-4">
+            <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
+              <span className="material-symbols-outlined text-gray-600 dark:text-white">arrow_back_ios_new</span>
+            </button>
+            <h1 className="text-lg font-bold flex-1 text-center pr-10 text-slate-900 dark:text-white">Meus Agendamentos</h1>
+          </div>
+        </header>
 
-          {filteredAppointments.length === 0 ? (
-            <div className="text-center py-16 bg-white dark:bg-surface-dark/30 rounded-3xl border border-gray-200 dark:border-white/5 border-dashed transition-colors">
-              <span className="material-symbols-outlined text-4xl text-gray-400 dark:text-gray-700 mb-2">event_busy</span>
-              <p className="text-gray-500 text-sm mb-4">Nenhum agendamento {activeTab === 'upcoming' ? 'marcado' : 'encontrado'}.</p>
-              {activeTab === 'past' && !showPastHistory && (
-                <button
-                  onClick={() => setShowPastHistory(true)}
-                  className="px-6 py-2 bg-primary/10 text-primary rounded-xl font-bold hover:bg-primary/20 transition-all flex items-center gap-2 mx-auto"
-                >
-                  <span className="material-symbols-outlined text-base">history</span>
-                  Carregar Todo o Histórico
-                </button>
-              )}
-            </div>
-          ) : (
-            <>
-              {filteredAppointments.map(app => (
-                <div key={app.id} className="bg-white dark:bg-surface-dark rounded-2xl border border-gray-200 dark:border-white/5 mb-4 overflow-hidden shadow-sm relative hover:border-primary/20 dark:hover:border-white/10 transition-all">
-                  <div className={`absolute top-0 right-0 px-3 py-1 text-[10px] font-bold rounded-bl-xl tracking-wider uppercase ${app.status === 'CANCELLED' ? 'bg-red-500/10 text-red-500' : 'bg-green-500/20 text-green-700 dark:text-green-400'
-                    }`}>{app.status}</div>
-                  <div className="p-4 flex gap-4">
-                    <div className={`size-16 rounded-xl flex flex-col items-center justify-center border transition-colors ${activeTab === 'past' ? 'bg-gray-100 border-gray-200 opacity-70' : 'bg-gray-50 dark:bg-white/5 border-gray-100 dark:border-white/5'
-                      }`}>
-                      <span className="text-[10px] font-bold uppercase text-gray-500">Dia</span>
-                      <span className="text-xl font-bold text-slate-900 dark:text-white">{app.date.split('-')[2]}</span>
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-sm text-slate-900 dark:text-white">{app.services?.[0]?.name || 'Serviço não especificado'} {app.services?.length > 1 ? `+ ${app.services.length - 1} serviço` : ''}</h3>
-                      <div className="flex flex-col gap-1 mt-2">
-                        <p className="text-gray-500 dark:text-gray-400 text-xs flex items-center gap-1"><span className="material-symbols-outlined text-[14px]">calendar_month</span> {formatDateToBRL(app.date)}</p>
-                        <p className="text-gray-500 dark:text-gray-400 text-xs flex items-center gap-1"><span className="material-symbols-outlined text-[14px]">schedule</span> {app.time}</p>
+        <main className="p-4 space-y-6 max-w-md mx-auto w-full flex-1">
+          <div className="flex bg-gray-100 dark:bg-surface-dark p-1 rounded-xl transition-colors">
+            <button
+              onClick={() => setActiveTab('upcoming')}
+              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${activeTab === 'upcoming' ? 'bg-primary text-white shadow-sm' : 'text-gray-500'}`}
+            >
+              Próximos
+            </button>
+            <button
+              onClick={() => setActiveTab('past')}
+              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${activeTab === 'past' ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm' : 'text-gray-500'}`}
+            >
+              Anteriores
+            </button>
+          </div>
+
+          <section>
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 dark:text-white">
+              <span className="material-symbols-outlined text-primary">calendar_today</span>
+              {activeTab === 'upcoming' ? 'Agendamentos Futuros' : 'Histórico'}
+            </h2>
+
+            {filteredAppointments.length === 0 ? (
+              <div className="text-center py-16 bg-white dark:bg-surface-dark/30 rounded-3xl border border-gray-200 dark:border-white/5 border-dashed transition-colors">
+                <span className="material-symbols-outlined text-4xl text-gray-400 dark:text-gray-700 mb-2">event_busy</span>
+                <p className="text-gray-500 text-sm mb-4">Nenhum agendamento {activeTab === 'upcoming' ? 'marcado' : 'encontrado'}.</p>
+                {activeTab === 'past' && !showPastHistory && (
+                  <button
+                    onClick={() => setShowPastHistory(true)}
+                    className="px-6 py-2 bg-primary/10 text-primary rounded-xl font-bold hover:bg-primary/20 transition-all flex items-center gap-2 mx-auto"
+                  >
+                    <span className="material-symbols-outlined text-base">history</span>
+                    Carregar Todo o Histórico
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                {filteredAppointments.map(app => (
+                  <div key={app.id} className="bg-white dark:bg-surface-dark rounded-2xl border border-gray-200 dark:border-white/5 mb-4 overflow-hidden shadow-sm relative hover:border-primary/20 dark:hover:border-white/10 transition-all">
+                    <div className={`absolute top-0 right-0 px-3 py-1 text-[10px] font-bold rounded-bl-xl tracking-wider uppercase ${app.status === 'CANCELLED' ? 'bg-red-500/10 text-red-500' : 'bg-green-500/20 text-green-700 dark:text-green-400'
+                      }`}>{app.status === 'PENDING' ? 'Pendente' : app.status === 'CONFIRMED' ? 'Confirmado' : app.status === 'COMPLETED' ? 'Concluído' : app.status === 'CANCELLED' ? 'Cancelado' : app.status}</div>
+                    <div className="p-4 flex gap-4">
+                      <div className={`size-16 rounded-xl flex flex-col items-center justify-center border transition-colors ${activeTab === 'past' ? 'bg-gray-100 border-gray-200 opacity-70' : 'bg-gray-50 dark:bg-white/5 border-gray-100 dark:border-white/5'
+                        }`}>
+                        <span className="text-[10px] font-bold uppercase text-gray-500">Dia</span>
+                        <span className="text-xl font-bold text-slate-900 dark:text-white">{app.date.split('-')[2]}</span>
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-sm text-slate-900 dark:text-white">{app.services?.[0]?.name || 'Serviço não especificado'} {app.services?.length > 1 ? `+ ${app.services.length - 1} serviço` : ''}</h3>
+                        <div className="flex flex-col gap-1 mt-2">
+                          <p className="text-gray-500 dark:text-gray-400 text-xs flex items-center gap-1"><span className="material-symbols-outlined text-[14px]">calendar_month</span> {formatDateToBRL(app.date)}</p>
+                          <p className="text-gray-500 dark:text-gray-400 text-xs flex items-center gap-1"><span className="material-symbols-outlined text-[14px]">schedule</span> {app.time}</p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="p-4 border-t border-gray-100 dark:border-white/5 flex items-center justify-between bg-gray-50/50 dark:bg-white/[0.02] transition-colors">
-                    <span className="font-bold text-slate-900 dark:text-white">R$ {app.totalPrice.toFixed(2)}</span>
-                    {activeTab === 'upcoming' && (
-                      <button
-                        onClick={async () => {
-                          if (window.confirm('Deseja realmente cancelar este agendamento?')) {
-                            const { error } = await supabase.from('appointments').delete().eq('id', app.id);
-                            if (error) {
-                              console.error('Erro ao cancelar:', error);
-                              alert('Não foi possível cancelar o agendamento.');
-                            } else {
-                              onRefresh();
+                    <div className="p-4 border-t border-gray-100 dark:border-white/5 flex items-center justify-between bg-gray-50/50 dark:bg-white/[0.02] transition-colors">
+                      <span className="font-bold text-slate-900 dark:text-white">R$ {app.totalPrice.toFixed(2)}</span>
+                      {activeTab === 'upcoming' && (
+                        <button
+                          onClick={async () => {
+                            if (window.confirm('Deseja realmente cancelar este agendamento?')) {
+                              const { error } = await supabase.from('appointments').delete().eq('id', app.id);
+                              if (error) {
+                                console.error('Erro ao cancelar:', error);
+                                alert('Não foi possível cancelar o agendamento.');
+                              } else {
+                                onRefresh();
+                              }
                             }
-                          }
-                        }}
-                        className="text-primary text-xs font-bold uppercase flex items-center gap-1 hover:opacity-80 transition-opacity"
-                      >
-                        <span className="material-symbols-outlined text-sm">cancel</span> Cancelar
-                      </button>
-                    )}
+                          }}
+                          className="text-primary text-xs font-bold uppercase flex items-center gap-1 hover:opacity-80 transition-opacity"
+                        >
+                          <span className="material-symbols-outlined text-sm">cancel</span> Cancelar
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
-              {activeTab === 'past' && !showPastHistory && (
-                <button
-                  onClick={() => setShowPastHistory(true)}
-                  className="w-full py-4 text-primary text-xs font-bold uppercase hover:bg-primary/5 rounded-xl transition-all"
-                >
-                  Ver agendamentos mais antigos
-                </button>
-              )}
-            </>
-          )}
-        </section>
-        <div className="mt-8 p-6 rounded-3xl bg-primary/5 border border-primary/20 text-center shadow-sm">
-          <div className="p-4 bg-primary/10 rounded-2xl inline-flex text-primary mb-4 shadow-inner"><span className="material-symbols-outlined text-[32px]">add_circle</span></div>
-          <h3 className="font-bold text-lg mb-1 text-slate-900 dark:text-white">Novo Agendamento</h3>
-          <p className="text-sm text-gray-500 mb-6 px-4">Precisa de um trato no visual? Escolha um novo serviço e horário.</p>
-          <button onClick={onNew} className="w-full py-3.5 rounded-xl bg-primary text-white font-bold shadow-lg shadow-primary/20 active:scale-[0.98] transition-all">Agendar Horário</button>
-        </div>
-      </main>
+                ))}
+                {activeTab === 'past' && !showPastHistory && (
+                  <button
+                    onClick={() => setShowPastHistory(true)}
+                    className="w-full py-4 text-primary text-xs font-bold uppercase hover:bg-primary/5 rounded-xl transition-all"
+                  >
+                    Ver agendamentos mais antigos
+                  </button>
+                )}
+              </>
+            )}
+          </section>
+
+          <div className="mt-8 p-6 rounded-3xl bg-primary/5 border border-primary/20 text-center shadow-sm">
+            <div className="p-4 bg-primary/10 rounded-2xl inline-flex text-primary mb-4 shadow-inner"><span className="material-symbols-outlined text-[32px]">add_circle</span></div>
+            <h3 className="font-bold text-lg mb-1 text-slate-900 dark:text-white">Novo Agendamento</h3>
+            <p className="text-sm text-gray-500 mb-6 px-4">Precisa de um trato no visual? Escolha um novo serviço e horário.</p>
+            <button onClick={onNew} className="w-full py-3.5 rounded-xl bg-primary text-white font-bold shadow-lg shadow-primary/20 active:scale-[0.98] transition-all">Agendar Horário</button>
+          </div>
+        </main>
+      </div>
     </div>
   );
 };
@@ -1693,13 +1859,18 @@ const AdminChatListScreen: React.FC<{ onBack: () => void; onSelectChat: (clientI
   }, []);
 
   return (
-    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col transition-colors">
-      <header className="sticky top-0 z-50 p-4 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark flex items-center justify-between backdrop-blur-md transition-colors">
-        <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400"><span className="material-symbols-outlined">arrow_back</span></button>
-        <h2 className="font-bold text-slate-900 dark:text-white">Conversas</h2>
-        <div className="size-10"></div>
-      </header>
-      <main className="flex-1 overflow-y-auto p-4 space-y-2">
+    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen transition-colors">
+      <div className="flex flex-col min-h-screen relative">
+        <header className="sticky top-0 z-50 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md border-b border-gray-200 dark:border-white/5 transition-colors text-slate-900 dark:text-white">
+          <div className="max-w-md mx-auto w-full flex items-center justify-between p-4">
+            <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400 transition-colors">
+              <span className="material-symbols-outlined">arrow_back</span>
+            </button>
+            <h2 className="font-bold">Conversas</h2>
+            <div className="size-10"></div>
+          </div>
+        </header>
+        <main className="max-w-md mx-auto w-full p-4 space-y-2 flex-1 overflow-y-auto">
         {conversations.length === 0 ? (
           <div className="text-center py-10 text-gray-500 text-sm">Nenhuma conversa iniciada.</div>
         ) : (conversations.map(c => (
@@ -1718,7 +1889,8 @@ const AdminChatListScreen: React.FC<{ onBack: () => void; onSelectChat: (clientI
         )))}
       </main>
     </div>
-  );
+  </div>
+);
 };
 
 const ChatScreen: React.FC<{
@@ -1766,7 +1938,8 @@ const ChatScreen: React.FC<{
 
   if (needsIdentity) {
     return (
-      <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col p-6 max-w-md mx-auto w-full justify-center transition-colors">
+      <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen transition-colors">
+        <div className="flex flex-col p-6 max-w-md mx-auto w-full justify-center min-h-screen relative">
         <button onClick={onBack} className="absolute top-6 left-6 size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400"><span className="material-symbols-outlined">arrow_back</span></button>
         <div className="text-center mb-8">
           <div className="size-20 bg-primary/20 text-primary rounded-full flex items-center justify-center mx-auto mb-4 border border-primary/20"><span className="material-symbols-outlined text-4xl filled">chat</span></div>
@@ -1778,62 +1951,69 @@ const ChatScreen: React.FC<{
           <input value={tempPhone} onChange={e => setTempPhone(e.target.value)} className="w-full bg-white dark:bg-surface-dark border border-gray-200 dark:border-white/10 rounded-xl p-4 text-slate-900 dark:text-white placeholder:text-gray-400" placeholder="Seu Telefone (WhatsApp)" />
           <button onClick={handleStartChat} className="w-full bg-primary py-4 rounded-xl font-bold shadow-lg shadow-primary/20 text-white">Iniciar Chat</button>
         </div>
+        </div>
       </div>
-    )
+    );
   }
 
   return (
-    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark h-screen flex flex-col transition-colors">
-      <header className="p-4 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 flex items-center gap-3 transition-colors">
-        <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400">
-          <span className="material-symbols-outlined">arrow_back</span>
-        </button>
-        <div className="size-10 rounded-full bg-gray-200 dark:bg-surface-dark border border-gray-200 dark:border-white/5 flex items-center justify-center overflow-hidden">
-          <img src={currentUserRole === 'CUSTOMER' ? "/adriana.png" : "/logo.png"} alt="Avatar" className="h-full w-full object-cover" />
-        </div>
-        <div>
-          <h2 className="font-bold text-sm text-slate-900 dark:text-white">{otherPersonName}</h2>
-          <div className="flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-green-500"></span>
-            <span className="text-[10px] text-gray-500 font-bold uppercase">{otherPersonRole} Online</span>
-          </div>
-        </div>
-      </header>
-
-      <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar bg-gray-50 dark:bg-background-dark transition-colors">
-        {messages.map((msg) => (
-          <div key={msg.id} className={`flex ${msg.sender === currentUserRole ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${msg.sender === currentUserRole
-              ? 'bg-primary text-white rounded-tr-none shadow-lg shadow-primary/10'
-              : 'bg-white dark:bg-surface-dark text-slate-800 dark:text-gray-200 rounded-tl-none border border-gray-200 dark:border-white/5 shadow-sm'
-              }`}>
-              {msg.text}
-              <div className={`text-[10px] mt-1 opacity-50 ${msg.sender === currentUserRole ? 'text-right' : 'text-left'}`}>
-                {msg.timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen transition-colors">
+      <div className="flex flex-col h-screen relative">
+        <header className="p-4 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 flex items-center gap-3 transition-colors">
+          <div className="max-w-md mx-auto w-full flex items-center gap-3">
+            <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400">
+              <span className="material-symbols-outlined">arrow_back</span>
+            </button>
+            <div className="size-10 rounded-full bg-gray-200 dark:bg-surface-dark border border-gray-200 dark:border-white/5 flex items-center justify-center overflow-hidden">
+              <img src={currentUserRole === 'CUSTOMER' ? "/adriana.png" : "/logo.png"} alt="Avatar" className="h-full w-full object-cover" />
+            </div>
+            <div>
+              <h2 className="font-bold text-sm text-slate-900 dark:text-white">{otherPersonName}</h2>
+              <div className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-green-500"></span>
+                <span className="text-[10px] text-gray-500 font-bold uppercase">{otherPersonRole} Online</span>
               </div>
             </div>
           </div>
-        ))}
-      </main>
+        </header>
 
-      <footer className="p-4 bg-white/95 dark:bg-surface-dark/50 border-t border-gray-200 dark:border-white/5 pb-8 transition-colors">
-        <div className="max-w-md mx-auto flex gap-2">
-          <input
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Digite sua mensagem..."
-            className="flex-1 bg-gray-100 dark:bg-surface-dark border-transparent dark:border-white/10 rounded-xl px-4 py-3 text-sm focus:ring-primary focus:border-primary text-slate-900 dark:text-white placeholder:text-gray-400"
-          />
-          <button
-            onClick={handleSend}
-            className="size-12 bg-primary text-white rounded-xl flex items-center justify-center shadow-lg shadow-primary/20 active:scale-95 transition-all"
-          >
-            <span className="material-symbols-outlined filled">send</span>
-          </button>
-        </div>
-      </footer>
+        <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar bg-transparent transition-colors">
+          <div className="max-w-md mx-auto w-full space-y-4">
+            {messages.map((msg) => (
+              <div key={msg.id} className={`flex ${msg.sender === currentUserRole ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${msg.sender === currentUserRole
+                  ? 'bg-primary text-white rounded-tr-none shadow-lg shadow-primary/10'
+                  : 'bg-white dark:bg-surface-dark text-slate-800 dark:text-gray-200 rounded-tl-none border border-gray-200 dark:border-white/5 shadow-sm'
+                  }`}>
+                  {msg.text}
+                  <div className={`text-[10px] mt-1 opacity-50 ${msg.sender === currentUserRole ? 'text-right' : 'text-left'}`}>
+                    {msg.timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </main>
+
+        <footer className="p-4 bg-white/95 dark:bg-surface-dark/50 border-t border-gray-200 dark:border-white/5 pb-8 transition-colors">
+          <div className="max-w-md mx-auto flex gap-2">
+            <input
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+              placeholder="Digite sua mensagem..."
+              className="flex-1 bg-gray-100 dark:bg-surface-dark border-transparent dark:border-white/10 rounded-xl px-4 py-3 text-sm focus:ring-primary focus:border-primary text-slate-900 dark:text-white placeholder:text-gray-400"
+            />
+            <button
+              onClick={handleSend}
+              className="size-12 bg-primary text-white rounded-xl flex items-center justify-center shadow-lg shadow-primary/20 active:scale-95 transition-all"
+            >
+              <span className="material-symbols-outlined filled">send</span>
+            </button>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 };
@@ -1909,10 +2089,14 @@ const AdminWeeklyScheduleScreen: React.FC<{ onBack: () => void }> = ({ onBack })
 
   return (
     <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col transition-colors">
-      <header className="sticky top-0 z-50 p-4 border-b border-gray-200 dark:border-white/5 bg-primary text-white flex items-center justify-between shadow-md">
-        <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-white/20 text-white"><span className="material-symbols-outlined">arrow_back</span></button>
-        <h2 className="font-bold text-lg">Horários de Atendimento</h2>
-        <div className="size-10"></div>
+      <header className="sticky top-0 z-50 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md transition-colors">
+        <div className="max-w-md mx-auto w-full flex items-center justify-between p-4">
+          <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400 font-bold transition-colors">
+            <span className="material-symbols-outlined">arrow_back</span>
+          </button>
+          <h2 className="font-bold text-slate-900 dark:text-white">Horários de Atendimento</h2>
+          <div className="size-10"></div>
+        </div>
       </header>
 
       <main className="p-4 space-y-4 max-w-md mx-auto w-full pb-24">
@@ -2093,10 +2277,14 @@ const AdminSettingsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   return (
     <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col transition-colors">
-      <header className="sticky top-0 z-50 p-4 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark flex items-center justify-between backdrop-blur-md transition-colors">
-        <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400"><span className="material-symbols-outlined">arrow_back</span></button>
-        <h2 className="font-bold text-slate-900 dark:text-white">Configuração da Agenda</h2>
-        <div className="size-10"></div>
+      <header className="sticky top-0 z-50 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark flex items-center justify-between backdrop-blur-md transition-colors">
+        <div className="max-w-md mx-auto w-full flex items-center justify-between p-4">
+          <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400 font-bold transition-colors">
+            <span className="material-symbols-outlined">arrow_back</span>
+          </button>
+          <h2 className="font-bold text-slate-900 dark:text-white">Configuração da Agenda</h2>
+          <div className="size-10"></div>
+        </div>
       </header>
       <main className="p-4 space-y-6 max-w-md mx-auto w-full">
         <div className="bg-white dark:bg-surface-dark p-6 rounded-xl border border-gray-200 dark:border-white/10 space-y-4 transition-colors">
@@ -2160,8 +2348,6 @@ const LoginScreen: React.FC<{ onLogin: () => void; onBack: () => void }> = ({ on
       setError(error.message === 'Invalid login credentials' ? 'Email ou senha inválidos' : 'Erro ao fazer login');
     } else if (data.user) {
       if (remember) {
-        // Supabase persists by default, but we can respect the checkbox logic if we wanted to manipulate storage
-        // For now, we rely on standard persistence or just setting our local flag if needed for other logic
         localStorage.setItem('admin_auth', 'true');
       }
       onLogin();
@@ -2169,64 +2355,65 @@ const LoginScreen: React.FC<{ onLogin: () => void; onBack: () => void }> = ({ on
   };
 
   return (
-    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col p-6 max-w-md mx-auto w-full transition-colors">
-      <div className="flex items-center mb-8">
-        <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-600 dark:text-white transition-colors"><span className="material-symbols-outlined">arrow_back_ios_new</span></button>
-        <h2 className="text-lg font-bold flex-1 text-center pr-10 text-slate-900 dark:text-white">Login</h2>
-      </div>
-      <div className="mb-10">
-        <h1 className="text-3xl font-bold mb-2 text-slate-900 dark:text-white">Painel Administrativo</h1>
-        <p className="text-gray-500 dark:text-gray-400">Gerencie seu salão com facilidade e profissionalismo.</p>
-      </div>
-      <div className="flex flex-col items-center mb-10">
-        <div className="size-24 rounded-full bg-white dark:bg-surface-dark border-4 border-gray-100 dark:border-white/5 flex items-center justify-center overflow-hidden relative group shadow-lg transition-colors">
-          {/* <span className="material-symbols-outlined text-4xl text-gray-500">person</span> */}
-          <img src="/adriana.png" className="h-full w-full object-cover" />
-          <div className="absolute bottom-0 right-0 bg-primary p-1.5 rounded-full border-2 border-white dark:border-background-dark shadow-md"><span className="material-symbols-outlined text-xs text-white">photo_camera</span></div>
+    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen transition-colors">
+      <div className="flex flex-col p-6 max-w-md mx-auto w-full min-h-screen relative">
+        <div className="flex items-center mb-8">
+          <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-600 dark:text-white transition-colors"><span className="material-symbols-outlined">arrow_back_ios_new</span></button>
+          <h2 className="text-lg font-bold flex-1 text-center pr-10 text-slate-900 dark:text-white">Login</h2>
         </div>
-        <span className="text-primary text-sm font-bold mt-3">Adriana Henrique</span>
-      </div>
-      <div className="space-y-4 mb-10">
-        <div className="relative">
-          <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">alternate_email</span>
-          <input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-xl bg-white dark:bg-surface-dark border-transparent h-14 pl-12 pr-4 focus:ring-primary focus:border-primary transition-all text-sm text-slate-900 dark:text-white placeholder:text-gray-400 shadow-sm"
-            placeholder="E-mail profissional"
-            type="email"
-          />
+        <div className="mb-10">
+          <h1 className="text-3xl font-bold mb-2 text-slate-900 dark:text-white">Painel Administrativo</h1>
+          <p className="text-gray-500 dark:text-gray-400">Gerencie seu salão com facilidade e profissionalismo.</p>
         </div>
-        <div className="relative">
-          <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">lock</span>
-          <input
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-xl bg-white dark:bg-surface-dark border-transparent h-14 pl-12 pr-4 focus:ring-primary focus:border-primary transition-all text-sm text-slate-900 dark:text-white placeholder:text-gray-400 shadow-sm"
-            placeholder="Senha"
-            type="password"
-          />
+        <div className="flex flex-col items-center mb-10">
+          <div className="size-24 rounded-full bg-white dark:bg-surface-dark border-4 border-gray-100 dark:border-white/5 flex items-center justify-center overflow-hidden relative group shadow-lg transition-colors">
+            <img src="/adriana.png" className="h-full w-full object-cover" />
+            <div className="absolute bottom-0 right-0 bg-primary p-1.5 rounded-full border-2 border-white dark:border-background-dark shadow-md"><span className="material-symbols-outlined text-xs text-white">photo_camera</span></div>
+          </div>
+          <span className="text-primary text-sm font-bold mt-3">Adriana Henrique</span>
         </div>
-        <div className="flex items-center gap-2 mb-4">
-          <input
-            type="checkbox"
-            id="remember"
-            checked={remember}
-            onChange={e => setRemember(e.target.checked)}
-            className="rounded border-gray-300 text-primary focus:ring-primary"
-          />
-          <label htmlFor="remember" className="text-sm text-gray-500 dark:text-gray-400">Manter conectado</label>
-        </div>
+        <div className="space-y-4 mb-10">
+          <div className="relative">
+            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">alternate_email</span>
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full rounded-xl bg-white dark:bg-surface-dark border-transparent h-14 pl-12 pr-4 focus:ring-primary focus:border-primary transition-all text-sm text-slate-900 dark:text-white placeholder:text-gray-400 shadow-sm"
+              placeholder="E-mail profissional"
+              type="email"
+            />
+          </div>
+          <div className="relative">
+            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">lock</span>
+            <input
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full rounded-xl bg-white dark:bg-surface-dark border-transparent h-14 pl-12 pr-4 focus:ring-primary focus:border-primary transition-all text-sm text-slate-900 dark:text-white placeholder:text-gray-400 shadow-sm"
+              placeholder="Senha"
+              type="password"
+            />
+          </div>
+          <div className="flex items-center gap-2 mb-4">
+            <input
+              type="checkbox"
+              id="remember"
+              checked={remember}
+              onChange={e => setRemember(e.target.checked)}
+              className="rounded border-gray-300 text-primary focus:ring-primary"
+            />
+            <label htmlFor="remember" className="text-sm text-gray-500 dark:text-gray-400">Manter conectado</label>
+          </div>
 
-        {error && <p className="text-red-500 text-sm font-bold text-center mb-4">{error}</p>}
+          {error && <p className="text-red-500 text-sm font-bold text-center mb-4">{error}</p>}
+        </div>
+        <button
+          onClick={handleSubmit}
+          disabled={loading}
+          className="w-full bg-primary h-14 rounded-xl font-bold flex items-center justify-center gap-2 text-white shadow-lg shadow-primary/20 active:scale-[0.98] transition-all disabled:opacity-50"
+        >
+          <span>{loading ? 'Entrando...' : 'Acessar Painel'}</span> <span className="material-symbols-outlined">arrow_forward</span>
+        </button>
       </div>
-      <button
-        onClick={handleSubmit}
-        disabled={loading}
-        className="w-full bg-primary h-14 rounded-xl font-bold flex items-center justify-center gap-2 text-white shadow-lg shadow-primary/20 active:scale-[0.98] transition-all disabled:opacity-50"
-      >
-        <span>{loading ? 'Entrando...' : 'Acessar Painel'}</span> <span className="material-symbols-outlined">arrow_forward</span>
-      </button>
     </div>
   );
 };
@@ -2237,7 +2424,9 @@ const AdminCalendarView: React.FC<{
   onDateChange: (dateStr: string) => void;
   onAppointmentClick: (app: Appointment) => void;
   workHours: any[];
-}> = ({ appointments, selectedDateStr, onDateChange, onAppointmentClick, workHours }) => {
+  professionals: Professional[];
+}> = ({ appointments, selectedDateStr, onDateChange, onAppointmentClick, workHours, professionals }) => {
+  const [selectedProId, setSelectedProId] = useState<string | 'ALL'>('ALL');
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Constants
@@ -2246,8 +2435,12 @@ const AdminCalendarView: React.FC<{
   const TOTAL_MINUTES = (END_HOUR - START_HOUR) * 60;
   const PIXELS_PER_MINUTE = 2; // Increased for better visibility (120px per hour)
 
-  // Filter apps for selected date (Robust string comparison)
-  const dayApps = appointments.filter(a => a.date === selectedDateStr && a.status !== 'CANCELLED');
+  // Filter apps for selected date and professional
+  const dayApps = appointments.filter(a => 
+    a.date === selectedDateStr && 
+    a.status !== 'CANCELLED' &&
+    (selectedProId === 'ALL' || a.professionalId === selectedProId)
+  );
 
   // Helper to calculate position
   const getPosition = (timeStr: string, duration: number) => {
@@ -2304,6 +2497,7 @@ const AdminCalendarView: React.FC<{
             {dayApps.map(app => {
               const totalDuration = app.services.reduce((sum, s) => sum + s.duration, 0) || 30;
               const pos = getPosition(app.time, totalDuration);
+              const pro = professionals.find(p => p.id === app.professionalId);
 
               return (
                 <div
@@ -2314,10 +2508,17 @@ const AdminCalendarView: React.FC<{
                       app.status === 'CONFIRMED' ? 'bg-blue-100 border-blue-500 text-blue-900' :
                         'bg-yellow-100 border-yellow-500 text-yellow-900'}
                     `}
-                  style={{ top: `${pos.top}px`, height: `${pos.height}px` }}
+                  style={{ 
+                    top: `${pos.top}px`, 
+                    height: `${pos.height}px`,
+                    borderColor: pro?.color || undefined
+                  }}
                 >
                   <div className="flex justify-between items-start">
-                    <span className="font-bold text-xs truncate">{app.customerName}</span>
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-bold text-xs truncate">{app.customerName}</span>
+                      {pro && <span className="text-[8px] uppercase font-bold brightness-75" style={{ color: pro.color }}>{pro.name}</span>}
+                    </div>
                     <span className="text-[10px] font-mono opacity-80">{app.time}</span>
                   </div>
                   <div className="text-[10px] opacity-90 truncate mt-0.5">
@@ -2560,12 +2761,14 @@ const AdminDashboard: React.FC<{
   onFinance: () => void;
   onTV: () => void;
   onSubscriptions: () => void;
-  onManagePlans: () => void;
   onRefresh: () => void;
   onClients: () => void;
+  onProfessionals: () => void;
+  onManageProducts: () => void;
   setAppointments: React.Dispatch<React.SetStateAction<Appointment[]>>;
   unreadCount: number;
-}> = ({ appointments, showPastHistory, setShowPastHistory, onLogout, onOpenChat, onManageServices, onBlockSchedule, onSettings, onWeeklySchedule, onFinance, onTV, onSubscriptions, onManagePlans, onRefresh, onClients, setAppointments, unreadCount }) => {
+  professionals: Professional[];
+}> = ({ appointments, showPastHistory, setShowPastHistory, onLogout, onOpenChat, onManageServices, onBlockSchedule, onSettings, onWeeklySchedule, onFinance, onTV, onSubscriptions, onManagePlans, onRefresh, onClients, onProfessionals, onManageProducts, setAppointments, unreadCount, professionals }) => {
   const availableDays = useMemo(() => getNextDays(7), []);
   const [selectedDateStr, setSelectedDateStr] = useState(availableDays[0].dateStr); // Default to local today string
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -2573,10 +2776,28 @@ const AdminDashboard: React.FC<{
   const [viewMode, setViewMode] = useState<'LIST' | 'CALENDAR'>('LIST');
   const dateInputRef = useRef<HTMLInputElement>(null);
 
-  // Load WorkHours to pass to calendar if needed for disabled slots visual
   const [workHours, setWorkHours] = useState<any[]>([]);
+  const [birthdayClients, setBirthdayClients] = useState<any[]>([]);
+
   useEffect(() => {
     supabase.from('work_hours').select('*').then(({ data }) => { if (data) setWorkHours(data) });
+
+    const today = new Date();
+    const month = today.getMonth() + 1;
+    const day = today.getDate();
+    
+    supabase.from('clients')
+      .select('name, phone, birth_date')
+      .not('birth_date', 'is', null)
+      .then(({ data }) => {
+        if (data) {
+          const matched = data.filter((c: any) => {
+            const bDate = parseISO(c.birth_date);
+            return (bDate.getMonth() + 1) === month && bDate.getDate() === day;
+          });
+          setBirthdayClients(matched);
+        }
+      });
   }, []);
 
   console.log('AdminDashboard Render:', {
@@ -2655,19 +2876,21 @@ const AdminDashboard: React.FC<{
 
   return (
     <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col transition-colors">
-      <header className="sticky top-0 z-50 p-4 border-b border-gray-200 dark:border-white/5 bg-white/90 dark:bg-background-dark/90 flex items-center justify-between backdrop-blur-md transition-colors">
-        <div className="flex items-center gap-3">
-          <div className="size-10 rounded-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 overflow-hidden shadow-sm flex items-center justify-center p-1">
-            <img src="/adriana.png" alt="Admin" className="h-full w-full object-cover rounded-full" />
+      <header className="sticky top-0 z-50 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md transition-colors">
+        <div className="max-w-md mx-auto w-full flex items-center justify-between p-4">
+          <div className="flex items-center gap-3">
+            <div className="size-10 rounded-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-white/10 overflow-hidden shadow-sm flex items-center justify-center p-1">
+              <img src="/adriana.png" alt="Admin" className="h-full w-full object-cover rounded-full" />
+            </div>
+            <div>
+              <h2 className="font-bold leading-none text-slate-900 dark:text-white text-sm">Agenda</h2>
+              <span className="text-[10px] text-gray-500 font-bold uppercase tracking-tight">Adriana Henrique</span>
+            </div>
           </div>
-          <div>
-            <h2 className="font-bold leading-none text-slate-900 dark:text-white">Agenda</h2>
-            <span className="text-[10px] text-gray-500 font-bold uppercase tracking-tight">Adriana Henrique</span>
-          </div>
+          <button onClick={onLogout} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-400 font-bold transition-colors">
+            <span className="material-symbols-outlined">logout</span>
+          </button>
         </div>
-        <button onClick={onLogout} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-400 transition-colors">
-          <span className="material-symbols-outlined">logout</span>
-        </button>
       </header>
       <main className="p-4 pb-24 max-w-md mx-auto w-full">
         {/* Actions Grid */}
@@ -2769,6 +2992,19 @@ const AdminDashboard: React.FC<{
           </button>
 
           <button
+            onClick={onProfessionals}
+            className="relative group flex flex-col p-4 rounded-3xl bg-white dark:bg-surface-dark border border-gray-100 dark:border-white/5 hover:border-primary/30 active:scale-[0.98] transition-all overflow-hidden shadow-lg h-32 justify-between"
+          >
+            <div className="size-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/20">
+              <span className="material-symbols-outlined filled">badge</span>
+            </div>
+            <div className="text-left">
+              <h3 className="font-bold text-slate-900 dark:text-white">Equipe</h3>
+              <p className="text-blue-600 dark:text-blue-400 text-[10px] font-bold uppercase tracking-widest">Profissionais</p>
+            </div>
+          </button>
+
+          <button
             onClick={onSubscriptions}
             className="relative group flex flex-col p-4 rounded-3xl bg-white dark:bg-surface-dark border border-gray-100 dark:border-white/5 hover:border-primary/30 active:scale-[0.98] transition-all overflow-hidden shadow-lg h-32 justify-between"
           >
@@ -2795,18 +3031,28 @@ const AdminDashboard: React.FC<{
           </button>
 
           <button
-            onClick={onTV}
-            className="relative group flex flex-col p-4 rounded-3xl bg-slate-900 border border-slate-800 hover:border-primary/50 active:scale-[0.98] transition-all overflow-hidden shadow-lg h-32 justify-between col-span-2"
+            onClick={onManageProducts}
+            className="relative group flex flex-col p-4 rounded-3xl bg-white dark:bg-surface-dark border border-gray-100 dark:border-white/5 hover:border-primary/30 active:scale-[0.98] transition-all overflow-hidden shadow-lg h-32 justify-between"
           >
-            <div className="absolute top-0 right-0 p-3 opacity-20">
-              <span className="material-symbols-outlined text-6xl text-white">tv</span>
+            <div className="size-10 rounded-xl bg-pink-500 flex items-center justify-center text-white shadow-lg shadow-pink-500/20">
+              <span className="material-symbols-outlined filled">shopping_basket</span>
             </div>
-            <div className="size-10 rounded-xl bg-white/10 flex items-center justify-center text-white shadow-lg backdrop-blur-sm z-10">
+            <div className="text-left">
+              <h3 className="font-bold text-slate-900 dark:text-white">Vitrine</h3>
+              <p className="text-pink-500 text-[10px] font-bold uppercase tracking-widest">Produtos</p>
+            </div>
+          </button>
+
+          <button
+            onClick={onTV}
+            className="relative group flex flex-col p-4 rounded-3xl bg-slate-900 border border-slate-800 hover:border-primary/50 active:scale-[0.98] transition-all overflow-hidden shadow-lg h-32 justify-between"
+          >
+            <div className="size-10 rounded-xl bg-white/10 flex items-center justify-center text-white shadow-lg backdrop-blur-sm">
               <span className="material-symbols-outlined filled">desktop_windows</span>
             </div>
-            <div className="text-left z-10">
-              <h3 className="font-bold text-white text-lg">Modo TV (Painel)</h3>
-              <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">Visualizar Agendamentos na TV</p>
+            <div className="text-left">
+              <h3 className="font-bold text-white">Modo TV</h3>
+              <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">Painel</p>
             </div>
           </button>
         </div>
@@ -2878,6 +3124,7 @@ const AdminDashboard: React.FC<{
                 selectedDateStr={selectedDateStr}
                 onDateChange={setSelectedDateStr}
                 workHours={workHours}
+                professionals={professionals}
                 onAppointmentClick={(app) => setActiveMenuId(app.id)}
               />
               {activeMenuId && (
@@ -2932,6 +3179,34 @@ const AdminDashboard: React.FC<{
                 </div>
               </div>
 
+              {birthdayClients.length > 0 && (
+                <div className="mb-6 bg-gradient-to-r from-pink-500 to-rose-500 p-4 rounded-3xl text-white shadow-xl shadow-pink-500/20 animate-enter">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="material-symbols-outlined filled">cake</span>
+                    <h3 className="font-bold">Aniversariantes de Hoje!</h3>
+                  </div>
+                  <div className="space-y-2">
+                    {birthdayClients.map(c => (
+                      <div key={c.phone} className="flex items-center justify-between bg-white/20 p-3 rounded-2xl backdrop-blur-sm">
+                        <div className="flex flex-col">
+                          <span className="font-bold text-sm leading-tight">{c.name}</span>
+                          <span className="text-[10px] opacity-80">{c.phone}</span>
+                        </div>
+                        <button 
+                          onClick={() => {
+                              const text = `Parabéns ${c.name}! 🎉 Desejo um dia maravilhoso! Que tal vir comemorar no Adriana Coiffeur com um mimo especial?`;
+                              window.open(`https://wa.me/55${c.phone.replace(/\D/g, '')}?text=${encodeURIComponent(text)}`, '_blank');
+                          }}
+                          className="bg-white text-pink-500 px-3 py-1.5 rounded-xl text-[10px] font-bold shadow-sm hover:scale-105 transition-transform"
+                        >
+                          Parabenizar
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <h3 className="text-[11px] text-gray-500 font-bold uppercase mb-5 tracking-widest px-1 flex justify-between items-center">
                 <div className="flex items-center gap-2">
                   <span>Cronograma</span>
@@ -2976,7 +3251,7 @@ const AdminDashboard: React.FC<{
                           </span>
                         </div>
                         <span className="bg-green-500/15 text-green-600 dark:text-green-400 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest border border-green-500/20">
-                          {app.status === 'CONFIRMED' ? 'Confirmado' : app.status}
+                          {app.status === 'PENDING' ? 'Pendente' : app.status === 'CONFIRMED' ? 'Confirmado' : app.status === 'COMPLETED' ? 'Concluído' : app.status === 'CANCELLED' ? 'Cancelado' : app.status}
                         </span>
                       </div>
                       <div className="flex gap-4 items-center">
@@ -2986,6 +3261,15 @@ const AdminDashboard: React.FC<{
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <h4 className="font-bold text-base text-slate-900 dark:text-white truncate">{app.customerName}</h4>
+                            {(() => {
+                              const pro = professionals.find(p => p.id === app.professionalId);
+                              if (!pro) return null;
+                              return (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border" style={{ backgroundColor: `${pro.color}15`, color: pro.color, borderColor: `${pro.color}30` }}>
+                                  {pro.name}
+                                </span>
+                              );
+                            })()}
                             {app.clientSubscription?.isActive && (
                               <div className="flex items-center gap-1 bg-amber-500/10 text-amber-600 dark:text-amber-500 px-2 py-0.5 rounded-full border border-amber-500/20">
                                 <span className="material-symbols-outlined text-xs filled">crown</span>
@@ -3137,29 +3421,74 @@ Dúvidas, responder a essa mensagem!`)}`}
 };
 
 // --- Admin Services Screen ---
+const CATEGORY_ICONS = [
+  'content_cut', 'face', 'brush', 'spa', 'self_care', 'palette', 
+  'auto_fix_high', 'face_retouching_natural', 'hand_gesture', 
+  'health_and_beauty', 'flare', 'diamond', 'water_drop', 'chair',
+  'person', 'girl', 'boy', 'magic_button'
+];
+
 const AdminServicesScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [services, setServices] = useState<Service[]>([]);
+  const [cats, setCats] = useState<Category[]>([]);
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [isEditing, setIsEditing] = useState(false);
   const [editingService, setEditingService] = useState<Partial<Service>>({});
+  const [editingCat, setEditingCat] = useState<Partial<Category> | null>(null);
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
-  const fetchServices = async () => {
-    const { data, error } = await supabase
-      .from('services')
-      .select('*')
-      .eq('is_active', true)
-      .order('display_order', { ascending: true });
-
-    if (error) console.error(error);
-    else if (data) {
-      setServices(data.map((s: any) => ({
+  const fetchData = async () => {
+    const { data: sData } = await supabase.from('services').select('*').eq('is_active', true).order('display_order', { ascending: true });
+    const { data: cData } = await supabase.from('service_categories').select('*').order('display_order', { ascending: true });
+    
+    if (sData) {
+      setServices(sData.map((s: any) => ({
         ...s,
         imageUrl: s.image_url
       })));
     }
+    if (cData) setCats(cData);
   };
 
-  useEffect(() => { fetchServices(); }, []);
+  useEffect(() => { fetchData(); }, []);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      // Standard Supabase Bucket named 'services'
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      const { data, error } = await supabase.storage
+        .from('services')
+        .upload(filePath, file);
+
+      if (error) {
+        if (error.message.includes('bucket not found')) {
+          alert('Erro: O "bucket" de armazenamento "services" não foi encontrado no Supabase. Por favor, crie-o no painel do Supabase com acesso público.');
+        } else {
+          throw error;
+        }
+        return;
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('services')
+        .getPublicUrl(filePath);
+
+      setEditingService({ ...editingService, imageUrl: publicUrl });
+    } catch (err: any) {
+      console.error('Error uploading:', err);
+      alert('Erro ao carregar imagem: ' + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!editingService.name || !editingService.price) return;
@@ -3171,6 +3500,7 @@ const AdminServicesScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       price: editingService.price,
       duration: editingService.duration,
       image_url: editingService.imageUrl,
+      category_id: editingService.category_id,
       is_active: true
     };
 
@@ -3195,36 +3525,113 @@ const AdminServicesScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     } else {
       setIsEditing(false);
       setEditingService({});
-      fetchServices();
+      fetchData();
     }
+  };
+
+  const handleSaveCat = async () => {
+    if (!editingCat?.name) return;
+    setLoading(true);
+    const payload = { 
+      name: editingCat.name, 
+      icon: editingCat.icon, 
+      description: editingCat.description,
+      display_order: editingCat.display_order || 0 
+    };
+    
+    let error;
+    if (editingCat.id) error = (await supabase.from('service_categories').update(payload).eq('id', editingCat.id)).error;
+    else error = (await supabase.from('service_categories').insert(payload)).error;
+    
+    setLoading(false);
+    if (!error) { setEditingCat(null); fetchData(); }
+  };
+
+  const handleDeleteCat = async (id: string) => {
+    if (!window.confirm('Excluir categoria? Serviços vinculados ficarão sem categoria.')) return;
+    await supabase.from('service_categories').delete().eq('id', id);
+    fetchData();
   };
 
   const handleDelete = (id: string) => {
     if (!window.confirm('Tem certeza que deseja remover este serviço?')) return;
-    // Soft delete
     supabase.from('services').update({ is_active: false }).eq('id', id)
-      .then(() => fetchServices());
+      .then(() => fetchData());
   };
 
   if (isEditing) {
     return (
-      <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col p-6 max-w-md mx-auto w-full transition-colors">
+      <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen transition-colors">
+        <div className="flex flex-col p-6 max-w-md mx-auto w-full">
         <div className="flex items-center mb-8">
           <button onClick={() => setIsEditing(false)} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400"><span className="material-symbols-outlined">arrow_back_ios_new</span></button>
           <h2 className="text-lg font-bold flex-1 text-center pr-10 text-slate-900 dark:text-white">{editingService.id ? 'Editar Serviço' : 'Novo Serviço'}</h2>
         </div>
         <div className="space-y-4">
-          <input className="w-full bg-white dark:bg-surface-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-gray-400" placeholder="Nome do Serviço" value={editingService.name || ''} onChange={e => setEditingService({ ...editingService, name: e.target.value })} />
-          <textarea className="w-full bg-white dark:bg-surface-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 h-24 text-slate-900 dark:text-white placeholder:text-gray-400" placeholder="Descrição" value={editingService.description || ''} onChange={e => setEditingService({ ...editingService, description: e.target.value })} />
-          <div className="flex gap-2">
-            <input type="number" className="flex-1 bg-white dark:bg-surface-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-gray-400" placeholder="Preço (R$)" value={editingService.price || ''} onChange={e => setEditingService({ ...editingService, price: parseFloat(e.target.value) })} />
-            <input type="number" className="flex-1 bg-white dark:bg-surface-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-gray-400" placeholder="Duração (min)" value={editingService.duration || ''} onChange={e => setEditingService({ ...editingService, duration: parseInt(e.target.value) })} />
+          <div className="space-y-1">
+            <label className="text-[10px] font-black uppercase text-gray-400 px-1">Nome do Serviço</label>
+            <input className="w-full bg-white dark:bg-surface-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-gray-400" placeholder="Ex: Corte de Cabelo" value={editingService.name || ''} onChange={e => setEditingService({ ...editingService, name: e.target.value })} />
           </div>
-          <input className="w-full bg-white dark:bg-surface-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-gray-400" placeholder="URL da Imagem" value={editingService.imageUrl || ''} onChange={e => setEditingService({ ...editingService, imageUrl: e.target.value })} />
+          
+          <div className="space-y-1">
+            <label className="text-[10px] font-black uppercase text-gray-400 px-1">Descrição</label>
+            <textarea className="w-full bg-white dark:bg-surface-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 h-24 text-slate-900 dark:text-white placeholder:text-gray-400" placeholder="Descreva os detalhes do serviço..." value={editingService.description || ''} onChange={e => setEditingService({ ...editingService, description: e.target.value })} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase text-gray-400 px-1">Preço (R$)</label>
+              <input type="number" className="w-full bg-white dark:bg-surface-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-gray-400" placeholder="0.00" value={editingService.price || ''} onChange={e => setEditingService({ ...editingService, price: parseFloat(e.target.value) })} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase text-gray-400 px-1">Duração (min)</label>
+              <input type="number" className="w-full bg-white dark:bg-surface-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-gray-400" placeholder="30" value={editingService.duration || ''} onChange={e => setEditingService({ ...editingService, duration: parseInt(e.target.value) })} />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-black uppercase text-gray-400 px-1">Foto do Serviço</label>
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <input 
+                  className="w-full bg-white dark:bg-surface-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-xs text-slate-900 dark:text-white placeholder:text-gray-400 truncate pr-10" 
+                  placeholder="URL ou carregue um arquivo" 
+                  value={editingService.imageUrl || ''} 
+                  onChange={e => setEditingService({ ...editingService, imageUrl: e.target.value })} 
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                  <span className="material-symbols-outlined text-sm">{editingService.imageUrl ? 'link' : 'image'}</span>
+                </div>
+              </div>
+              <label className="shrink-0 size-12 bg-primary/10 text-primary border border-primary/20 rounded-lg flex items-center justify-center cursor-pointer hover:bg-primary hover:text-white transition-all overflow-hidden relative">
+                {uploading ? (
+                  <div className="size-5 border-2 border-primary border-t-transparent animate-spin rounded-full"></div>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined">add_a_photo</span>
+                    <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                  </>
+                )}
+              </label>
+            </div>
+          </div>
+          
+          <div className="space-y-1">
+            <label className="text-[10px] font-black uppercase text-gray-400 px-1">Categoria</label>
+            <select 
+              value={editingService.category_id || ''} 
+              onChange={e => setEditingService({ ...editingService, category_id: e.target.value })}
+              className="w-full bg-white dark:bg-surface-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white"
+            >
+              <option value="">Sem Categoria</option>
+              {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
 
           <button onClick={handleSave} disabled={loading} className="w-full bg-primary text-white py-4 rounded-xl font-bold shadow-lg shadow-primary/20">
             {loading ? 'Salvando...' : 'Salvar Serviço'}
           </button>
+        </div>
         </div>
       </div>
     );
@@ -3233,74 +3640,184 @@ const AdminServicesScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   const onDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
+    const catId = result.source.droppableId;
+    if (catId !== result.destination.droppableId) return; // Only allow reordering within same category
 
-    const items: Service[] = Array.from(services);
+    const catServices = services.filter(s => String(s.category_id) === catId);
+    const otherServices = services.filter(s => String(s.category_id) !== catId);
+    
+    const items = Array.from(catServices).sort((a: Service, b: Service) => (a.display_order ?? 0) - (b.display_order ?? 0));
     const [reorderedItem] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, reorderedItem);
 
-    setServices(items);
+    const newServices = [...otherServices, ...items];
+    setServices(newServices);
 
-    // Prepare updates
-    const updates = items.map((item, index) => ({
-      id: item.id,
-      name: item.name, // Required for upsert if not minimal, actually update allows partial
-      display_order: index
-    }));
-
-    // Batch update via Promise.all is safest for now, or use upsert if we change strategy.
-    // Supabase JS doesn't support bulk update with different values easily in one query without upsert/json trick.
-    // For specific rows updates, we can just iterate.
-
-    // Ideally use an RPC for this, but simplistic client-side loop is fine for small list ( < 20 services)
-    for (let i = 0; i < updates.length; i++) {
-      await supabase.from('services').update({ display_order: updates[i].display_order }).eq('id', updates[i].id);
+    // Update display_order for items in this category
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i] as Service;
+      await supabase.from('services').update({ display_order: i }).eq('id', item.id);
     }
   };
 
-  return (
-    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col transition-colors">
-      <header className="sticky top-0 z-50 p-4 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 flex items-center justify-between backdrop-blur-md transition-colors">
-        <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400"><span className="material-symbols-outlined">arrow_back</span></button>
-        <h2 className="font-bold text-slate-900 dark:text-white">Gerenciar Serviços</h2>
-        <div className="size-10"></div>
-      </header>
-      <main className="p-4 space-y-4 max-w-md mx-auto w-full pb-24">
+  const toggleCat = (id: string) => {
+    setExpandedCats(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
+  return (
+    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen transition-colors">
+      <div className="flex flex-col min-h-screen relative">
+        <header className="sticky top-0 z-50 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md border-b border-gray-200 dark:border-white/5 transition-colors">
+          <div className="max-w-md mx-auto w-full flex items-center p-4">
+            <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400 transition-colors">
+              <span className="material-symbols-outlined">arrow_back</span>
+            </button>
+            <h2 className="font-bold text-slate-900 dark:text-white">Gerenciar Serviços</h2>
+            <div className="size-10"></div>
+          </div>
+        </header>
+      <main className="p-4 space-y-4 max-w-md mx-auto w-full pb-24">
         <DragDropContext onDragEnd={onDragEnd}>
-          <Droppable droppableId="services-list">
-            {(provided) => (
-              <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-4">
-                {services.map((s, index) => (
-                  // @ts-expect-error Link for known react-beautiful-dnd types issue with React 18
-                  <Draggable key={s.id} draggableId={String(s.id)} index={index}>
+          {cats.map(cat => {
+            const catServices = services
+              .filter(s => String(s.category_id) === String(cat.id))
+              .sort((a: Service, b: Service) => (a.display_order ?? 0) - (b.display_order ?? 0));
+            const isExpanded = expandedCats.has(cat.id);
+
+            return (
+              <div key={cat.id} className="bg-white dark:bg-surface-dark rounded-2xl border border-gray-100 dark:border-white/5 overflow-hidden shadow-sm transition-all mb-4">
+                <div 
+                  className="w-full p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-3 flex-1" onClick={() => toggleCat(cat.id)}>
+                    <span className="material-symbols-outlined text-primary">{cat.icon || 'category'}</span>
+                    <span className="font-bold text-slate-900 dark:text-white">{cat.name}</span>
+                    <span className="text-[10px] bg-gray-100 dark:bg-white/10 px-2 py-0.5 rounded-full text-gray-500 font-bold">{catServices.length}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={(e) => { e.stopPropagation(); setEditingCat(cat); }} className="size-8 rounded-lg flex items-center justify-center text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors">
+                      <span className="material-symbols-outlined text-lg">edit</span>
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); toggleCat(cat.id); }} className="size-8 rounded-lg flex items-center justify-center text-gray-400">
+                      <span className={`material-symbols-outlined transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>expand_more</span>
+                    </button>
+                  </div>
+                </div>
+
+                {isExpanded && (
+                  <Droppable droppableId={String(cat.id)}>
                     {(provided) => (
-                      <div
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        className="bg-white dark:bg-surface-dark p-4 rounded-xl border border-gray-200 dark:border-white/5 flex gap-4 items-center transition-colors shadow-sm"
-                      >
-                        <div {...provided.dragHandleProps} className="text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing p-2 mr-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg shrink-0">
-                          <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="currentColor"><path d="M360-160q-33 0-56.5-23.5T280-240q0-33 23.5-56.5T360-320q33 0 56.5 23.5T440-240q0 33-23.5 56.5T360-160Zm240 0q-33 0-56.5-23.5T520-240q0-33 23.5-56.5T600-320q33 0 56.5 23.5T680-240q0 33-23.5 56.5T600-160ZM360-400q-33 0-56.5-23.5T280-480q0-33 23.5-56.5T360-560q33 0 56.5 23.5T440-480q0 33-23.5 56.5T360-400Zm240 0q-33 0-56.5-23.5T520-480q0-33 23.5-56.5T600-560q33 0 56.5 23.5T680-480q0 33-23.5 56.5T600-400ZM360-640q-33 0-56.5-23.5T280-720q0-33 23.5-56.5T360-800q33 0 56.5 23.5T440-720q0 33-23.5 56.5T360-640Zm240 0q-33 0-56.5-23.5T520-720q0-33 23.5-56.5T600-800q33 0 56.5 23.5T680-720q0 33-23.5 56.5T600-640Z" /></svg>
-                        </div>
-                        <img src={s.imageUrl} className="size-16 rounded-lg object-cover bg-gray-100 dark:bg-gray-800 pointer-events-none" />
-                        <div className="flex-1">
-                          <h3 className="font-bold text-slate-900 dark:text-white">{s.name}</h3>
-                          <p className="text-gray-500 dark:text-gray-400 text-xs">R$ {s.price.toFixed(2)} • {s.duration} min</p>
-                        </div>
-                        <div className="flex flex-col gap-2">
-                          <button onClick={() => { setEditingService(s); setIsEditing(true); }} className="size-8 rounded-lg bg-gray-100 dark:bg-white/5 flex items-center justify-center text-blue-500 dark:text-blue-400 transition-colors"><span className="material-symbols-outlined text-sm">edit</span></button>
-                          <button onClick={() => handleDelete(s.id)} className="size-8 rounded-lg bg-gray-100 dark:bg-white/5 flex items-center justify-center text-red-500 dark:text-red-400 transition-colors"><span className="material-symbols-outlined text-sm">delete</span></button>
-                        </div>
+                      <div {...provided.droppableProps} ref={provided.innerRef} className="p-2 space-y-2 border-t border-gray-50 dark:border-white/5 bg-gray-50/50 dark:bg-black/10">
+                        {catServices.length === 0 && (
+                          <p className="text-center py-6 text-xs text-gray-400 italic">Nenhum serviço nesta categoria</p>
+                        )}
+                        {catServices.map((s, index) => (
+                          // @ts-expect-error Link for known react-beautiful-dnd types issue with React 18
+                          <Draggable key={s.id} draggableId={String(s.id)} index={index}>
+                            {(provided) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                className="bg-white dark:bg-surface-dark p-3 rounded-xl border border-gray-200 dark:border-white/5 flex gap-3 items-center shadow-sm"
+                              >
+                                <div {...provided.dragHandleProps} className="text-gray-400 hover:text-gray-600 p-1 shrink-0">
+                                  <span className="material-symbols-outlined text-lg">drag_indicator</span>
+                                </div>
+                                <img src={s.imageUrl} className="size-12 rounded-lg object-cover bg-gray-100 dark:bg-gray-800 shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="font-bold text-xs text-slate-900 dark:text-white truncate">{s.name}</h3>
+                                  <p className="text-[10px] text-gray-500 font-medium">R$ {s.price.toFixed(2)} • {s.duration} min</p>
+                                </div>
+                                <div className="flex gap-1">
+                                  <button onClick={() => { setEditingService(s); setIsEditing(true); }} className="size-8 rounded-lg flex items-center justify-center text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors"><span className="material-symbols-outlined text-lg">edit</span></button>
+                                  <button onClick={() => handleDelete(s.id)} className="size-8 rounded-lg flex items-center justify-center text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"><span className="material-symbols-outlined text-lg">delete</span></button>
+                                </div>
+                              </div>
+                            )}
+                          </Draggable>
+                        ))}
+                        {provided.placeholder}
                       </div>
                     )}
-                  </Draggable>
-                ))}
-                {provided.placeholder}
+                  </Droppable>
+                )}
               </div>
-            )}
-          </Droppable>
+            );
+          })}
+          
+          {services.filter(s => !s.category_id).length > 0 && (
+            <div className="pt-6 mt-6 border-t-2 border-dashed border-gray-200 dark:border-white/5">
+              <h4 className="text-[10px] font-black uppercase text-gray-400 mb-3 px-2 flex items-center gap-2">
+                <span className="material-symbols-outlined text-sm">warning</span> Sem Categoria
+              </h4>
+              <div className="space-y-2">
+                {services.filter(s => !s.category_id).map(s => (
+                  <div key={s.id} className="bg-white/50 dark:bg-surface-dark/50 p-3 rounded-xl border border-gray-100 dark:border-white/5 flex gap-3 items-center opacity-80">
+                     <img src={s.imageUrl} className="size-10 rounded-lg object-cover grayscale opacity-50 shrink-0" />
+                     <div className="flex-1 min-w-0">
+                        <h3 className="text-xs font-bold text-gray-500 truncate">{s.name}</h3>
+                     </div>
+                     <button onClick={() => { setEditingService(s); setIsEditing(true); }} className="px-3 py-1.5 bg-primary/10 text-primary text-[10px] font-black uppercase rounded-lg hover:bg-primary hover:text-white transition-all">Vincular</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </DragDropContext>
 
+        <button onClick={() => setEditingCat({ name: '', icon: 'category', display_order: cats.length })} className="w-full py-6 mt-4 border-2 border-dashed border-gray-200 dark:border-white/10 rounded-2xl text-gray-400 font-bold hover:border-primary/40 hover:text-primary transition-all flex items-center justify-center gap-2 bg-white/30 dark:bg-white/5 group">
+          <div className="size-8 rounded-full bg-gray-100 dark:bg-white/5 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
+            <span className="material-symbols-outlined text-lg">add</span>
+          </div>
+          Nova Categoria
+        </button>
+
+        {editingCat && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl space-y-6 animate-scale-in">
+              <div className="text-center">
+                <h3 className="text-xl font-black text-slate-900 dark:text-white">{editingCat.id ? 'Editar Categoria' : 'Nova Categoria'}</h3>
+                <p className="text-sm text-gray-500 mt-1">Personalize como seus clientes verão seus serviços.</p>
+              </div>
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-gray-400 px-2">Nome</label>
+                  <input placeholder="Ex: Cortes Modernos" value={editingCat.name || ''} onChange={e => setEditingCat({...editingCat, name: e.target.value})} className="w-full p-4 rounded-2xl border border-gray-200 dark:bg-background-dark dark:border-white/10 dark:text-white transition-all focus:ring-2 focus:ring-primary/20 outline-none" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-gray-400 px-2">Descrição</label>
+                  <textarea placeholder="Ex: Cortes modernos e clássicos para todos os estilos" value={editingCat.description || ''} onChange={e => setEditingCat({...editingCat, description: e.target.value})} className="w-full p-4 rounded-2xl border border-gray-200 dark:bg-background-dark dark:border-white/10 dark:text-white h-24 transition-all focus:ring-2 focus:ring-primary/20 outline-none resize-none" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-gray-400 px-2 block">Escolha um Ícone</label>
+                  <div className="grid grid-cols-5 gap-2 p-2 bg-gray-50 dark:bg-background-dark rounded-2xl border border-gray-100 dark:border-white/5">
+                    {CATEGORY_ICONS.map(icon => (
+                      <button
+                        key={icon}
+                        onClick={() => setEditingCat({...editingCat, icon})}
+                        className={`size-10 rounded-xl flex items-center justify-center transition-all ${editingCat.icon === icon ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'hover:bg-gray-200 dark:hover:bg-white/5 text-gray-500'}`}
+                      >
+                        <span className="material-symbols-outlined text-lg">{icon}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setEditingCat(null)} className="flex-1 py-4 font-bold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors uppercase text-xs tracking-widest">Cancelar</button>
+                <button onClick={handleSaveCat} className="flex-1 py-4 bg-primary text-white font-bold rounded-2xl shadow-lg shadow-primary/20 active:scale-95 transition-all text-xs tracking-widest uppercase">Salvar</button>
+              </div>
+              {editingCat.id && (
+                <button onClick={() => { if(editingCat.id) handleDeleteCat(editingCat.id); }} className="w-full text-red-500 text-[10px] font-black uppercase tracking-widest hover:underline pt-2">Excluir Categoria</button>
+              )}
+            </div>
+          </div>
+        )}
       </main>
       <div className="fixed bottom-6 right-6 z-50">
         <button onClick={() => { setEditingService({}); setIsEditing(true); }} className="size-14 rounded-full bg-primary text-white shadow-lg shadow-primary/30 flex items-center justify-center transition-transform active:scale-95">
@@ -3308,7 +3825,8 @@ const AdminServicesScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         </button>
       </div>
     </div>
-  );
+  </div>
+);
 };
 
 
@@ -3423,13 +3941,16 @@ const SelectPlanScreen: React.FC<{
   }, []);
 
   return (
-    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col pb-12 transition-colors">
-      <header className="sticky top-0 z-50 flex items-center p-4 bg-white/95 dark:bg-background-dark/95 border-b border-gray-200 dark:border-white/5 transition-colors">
-        <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10">
-          <span className="material-symbols-outlined text-gray-600 dark:text-white">arrow_back</span>
-        </button>
-        <h2 className="text-lg font-bold flex-1 text-center pr-10 text-slate-900 dark:text-white">Clube de Assinatura</h2>
-      </header>
+    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen transition-colors">
+      <div className="flex flex-col min-h-screen relative pb-12">
+        <header className="sticky top-0 z-50 bg-white/95 dark:bg-background-dark/95 border-b border-gray-200 dark:border-white/5 transition-colors">
+          <div className="max-w-md mx-auto w-full flex items-center p-4">
+            <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
+              <span className="material-symbols-outlined text-gray-600 dark:text-white">arrow_back</span>
+            </button>
+            <h2 className="text-lg font-bold flex-1 text-center pr-10 text-slate-900 dark:text-white">Clube de Assinatura</h2>
+          </div>
+        </header>
 
       <main className="p-4 space-y-6 max-w-md mx-auto w-full">
         <div className="text-center space-y-2">
@@ -3585,7 +4106,8 @@ const SelectPlanScreen: React.FC<{
 
       </main>
     </div>
-  );
+  </div>
+);
 };
 
 const SubscriptionPaymentScreen: React.FC<{
@@ -3780,12 +4302,14 @@ const AdminSubscriptionsScreen: React.FC<{
   };
 
   return (
-    <div className="bg-gray-50 dark:bg-black min-h-screen flex flex-col pb-12 transition-colors">
-      <header className="sticky top-0 z-50 flex items-center p-4 bg-white dark:bg-background-dark border-b border-gray-200 dark:border-white/5 transition-colors">
-        <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10">
-          <span className="material-symbols-outlined text-gray-600 dark:text-white">arrow_back</span>
-        </button>
-        <h2 className="text-lg font-bold flex-1 text-center pr-10 text-slate-900 dark:text-white">Gerenciar Assinaturas</h2>
+    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col pb-12 transition-colors">
+      <header className="sticky top-0 z-50 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md transition-colors">
+        <div className="max-w-4xl mx-auto w-full flex items-center p-4">
+          <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
+            <span className="material-symbols-outlined text-gray-600 dark:text-white font-bold">arrow_back</span>
+          </button>
+          <h2 className="text-lg font-bold flex-1 text-center pr-10 text-slate-900 dark:text-white">Gerenciar Assinaturas</h2>
+        </div>
       </header>
 
       <main className="p-4 space-y-4 max-w-4xl mx-auto w-full">
@@ -3954,6 +4478,20 @@ const AdminManagePlansScreen: React.FC<{
   const [loading, setLoading] = useState(true);
   // Local controlled state for Qtd inputs: planId -> serviceId -> limit value
   const [localLimits, setLocalLimits] = useState<Record<string, Record<string, number>>>({});
+  const [isCreating, setIsCreating] = useState(false);
+  const [newPlan, setNewPlan] = useState<{
+    name: string;
+    price: number;
+    pix_code: string;
+    qr_code_url: string;
+    service_limits: Record<string, number>;
+  }>({
+    name: '',
+    price: 0,
+    pix_code: '',
+    qr_code_url: '',
+    service_limits: {}
+  });
 
   // Sync localLimits whenever plans data is refreshed from DB
   useEffect(() => {
@@ -3996,6 +4534,48 @@ const AdminManagePlansScreen: React.FC<{
     fetchServices();
   }, []);
 
+  const handleCreatePlan = async () => {
+    if (!newPlan.name || newPlan.price <= 0) {
+      alert('Por favor, preencha o nome e um preço válido.');
+      return;
+    }
+
+    const { data: createdPlan, error: planError } = await supabase
+      .from('subscription_plans')
+      .insert({
+        name: newPlan.name,
+        description: `Plano ${newPlan.name}`,
+        price: newPlan.price,
+        pix_code: newPlan.pix_code,
+        qr_code_url: newPlan.qr_code_url,
+        is_active: true,
+        monthly_limit: 0
+      })
+      .select()
+      .single();
+
+    if (planError) {
+      alert('Erro ao criar plano: ' + planError.message);
+      return;
+    }
+
+    if (createdPlan) {
+      const servicesList = Object.keys(newPlan.service_limits);
+      if (servicesList.length > 0) {
+        await supabase.from('plan_services').insert(
+          servicesList.map(sId => ({
+            plan_id: createdPlan.id,
+            service_id: parseInt(sId),
+            monthly_limit: newPlan.service_limits[sId] || 0
+          }))
+        );
+      }
+      setIsCreating(false);
+      setNewPlan({ name: '', price: 0, pix_code: '', qr_code_url: '', service_limits: {} });
+      fetchPlans();
+    }
+  };
+
   const handleUpdate = async (id: string, price: number, qr_code_url: string, pix_code: string, service_limits: Record<string, number>) => {
     const current = plans.find(p => p.id === id);
     const servicesList = Object.keys(service_limits).sort();
@@ -4034,12 +4614,20 @@ const AdminManagePlansScreen: React.FC<{
   };
 
   return (
-    <div className="bg-gray-50 dark:bg-black min-h-screen flex flex-col pb-12 transition-colors">
-      <header className="sticky top-0 z-50 flex items-center p-4 bg-white dark:bg-background-dark border-b border-gray-200 dark:border-white/5 transition-colors">
-        <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10">
-          <span className="material-symbols-outlined text-gray-600 dark:text-white">arrow_back</span>
-        </button>
-        <h2 className="text-lg font-bold flex-1 text-center pr-10 text-slate-900 dark:text-white">Configurar Planos</h2>
+    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col pb-12 transition-colors">
+      <header className="sticky top-0 z-50 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md transition-colors">
+        <div className="max-w-2xl mx-auto w-full flex items-center p-4">
+          <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
+            <span className="material-symbols-outlined text-gray-600 dark:text-white font-bold">arrow_back</span>
+          </button>
+          <h2 className="text-lg font-bold flex-1 text-center text-slate-900 dark:text-white">Planos de Assinatura</h2>
+          <button 
+            onClick={() => setIsCreating(true)}
+            className="size-10 rounded-full flex items-center justify-center bg-primary text-white shadow-lg shadow-primary/20 active:scale-95 transition-all"
+          >
+            <span className="material-symbols-outlined font-bold">add</span>
+          </button>
+        </div>
       </header>
 
       <main className="p-4 space-y-6 max-w-2xl mx-auto w-full">
@@ -4177,6 +4765,515 @@ const AdminManagePlansScreen: React.FC<{
           </div>
         ))}
       </main>
+
+      {isCreating && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md overflow-hidden">
+          <div className="bg-white dark:bg-surface-dark w-full max-w-lg rounded-[2rem] shadow-2xl flex flex-col max-h-[90vh] animate-enter">
+            <header className="p-6 border-b border-gray-100 dark:border-white/5 flex items-center justify-between">
+              <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Novo Plano</h3>
+              <button onClick={() => setIsCreating(false)} className="size-10 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-white/10 transition-colors">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </header>
+            
+            <main className="flex-1 overflow-y-auto p-6 space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1 col-span-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Nome do Plano</label>
+                  <input
+                    type="text"
+                    value={newPlan.name}
+                    onChange={e => setNewPlan({ ...newPlan, name: e.target.value })}
+                    className="w-full bg-gray-50 dark:bg-black/20 p-4 rounded-2xl border border-gray-200 dark:border-white/10 text-sm font-bold"
+                    placeholder="Ex: Plano Diamante"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Valor Mensal (R$)</label>
+                  <input
+                    type="number"
+                    value={newPlan.price || ''}
+                    onChange={e => setNewPlan({ ...newPlan, price: Number(e.target.value) })}
+                    className="w-full bg-gray-50 dark:bg-black/20 p-4 rounded-2xl border border-gray-200 dark:border-white/10 text-sm font-bold"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Serviços Inclusos e Limites</label>
+                <div className="grid grid-cols-1 gap-2 border border-gray-100 dark:border-white/5 p-4 rounded-2xl bg-gray-50/50 dark:bg-black/10">
+                  {services.map(s => {
+                    const isChecked = newPlan.service_limits[s.id] !== undefined;
+                    return (
+                      <div key={s.id} className="flex items-center justify-between gap-3 p-2 rounded-xl hover:bg-white dark:hover:bg-white/5 transition-colors">
+                        <label className="flex items-center gap-3 cursor-pointer flex-1">
+                          <input
+                            type="checkbox"
+                            className="size-5 rounded border-gray-300 text-amber-500 focus:ring-amber-500"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const next = { ...newPlan.service_limits };
+                              if (e.target.checked) next[s.id] = 1;
+                              else delete next[s.id];
+                              setNewPlan({ ...newPlan, service_limits: next });
+                            }}
+                          />
+                          <span className="text-sm font-bold text-slate-700 dark:text-gray-300">{s.name}</span>
+                        </label>
+                        {isChecked && (
+                          <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/40 rounded-xl px-3 py-2 border border-gray-200 dark:border-white/5">
+                             <span className="text-[10px] font-black text-gray-400 uppercase">Limite:</span>
+                             <input
+                               type="number"
+                               min="1"
+                               className="w-12 bg-transparent text-sm font-black text-amber-600 focus:outline-none text-center"
+                               value={newPlan.service_limits[s.id]}
+                               onChange={(e) => {
+                                 const val = Math.max(1, parseInt(e.target.value) || 1);
+                                 setNewPlan({ ...newPlan, service_limits: { ...newPlan.service_limits, [s.id]: val } });
+                               }}
+                             />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-4 pt-2">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Código Pix</label>
+                  <textarea
+                    value={newPlan.pix_code}
+                    onChange={e => setNewPlan({ ...newPlan, pix_code: e.target.value })}
+                    className="w-full bg-gray-50 dark:bg-black/20 p-4 rounded-2xl border border-gray-200 dark:border-white/10 text-xs font-mono"
+                    rows={2}
+                    placeholder="Pix Copia e Cola..."
+                  />
+                </div>
+                
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">QR Code</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setNewPlan({ ...newPlan, qr_code_url: reader.result as string });
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="w-full text-xs text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                  />
+                </div>
+              </div>
+            </main>
+
+            <footer className="p-6 border-t border-gray-100 dark:border-white/5 flex gap-3">
+              <button onClick={() => setIsCreating(false)} className="flex-1 py-4 text-gray-500 font-black uppercase text-xs tracking-widest transition-colors hover:text-red-500">Cancelar</button>
+              <button 
+                onClick={handleCreatePlan} 
+                className="flex-[2] py-4 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-amber-500/20 active:scale-95 transition-all"
+              >
+                Criar Plano
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const SelectProfessionalScreen: React.FC<{
+  booking: BookingState;
+  setBooking: React.Dispatch<React.SetStateAction<BookingState>>;
+  onNext: () => void;
+  onBack: () => void;
+  professionals: Professional[];
+}> = ({ booking, setBooking, onNext, onBack, professionals }) => {
+  const filteredProfessionals = professionals.filter(p => {
+    // If no services selected, show all (shouldn't happen in flow)
+    if (booking.selectedServices.length === 0) return true;
+    
+    // In a more complex scenario, we'd check if the professional performs ALL selected services
+    // For now, we show all active professionals as requested for "Adriana Coiffeur"
+    return p.isActive;
+  });
+
+  return (
+    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen transition-colors">
+      <div className="flex flex-col min-h-screen relative">
+        <header className="sticky top-0 z-20 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 backdrop-blur-sm transition-colors">
+          <div className="max-w-md mx-auto w-full flex items-center p-4">
+            <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-600 dark:text-gray-400 transition-colors">
+              <span className="material-symbols-outlined font-bold">arrow_back</span>
+            </button>
+            <h2 className="text-lg font-bold flex-1 text-center pr-10 text-slate-900 dark:text-white">Profissional</h2>
+          </div>
+        </header>
+        <main className="flex-1 p-6 max-w-md mx-auto w-full">
+          <h1 className="text-2xl font-black mb-2 text-slate-900 dark:text-white">Com quem você quer agendar?</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mb-8">Escolha o seu profissional de preferência.</p>
+          
+          <div className="space-y-4">
+            {filteredProfessionals.map(p => (
+              <button
+                key={p.id}
+                onClick={() => {
+                  setBooking(prev => ({ ...prev, selectedProfessional: p }));
+                  onNext();
+                }}
+                className={`w-full flex items-center gap-4 p-4 rounded-2xl bg-white dark:bg-surface-dark border transition-all hover:shadow-lg ${
+                  booking.selectedProfessional?.id === p.id ? 'border-primary ring-2 ring-primary/20' : 'border-gray-100 dark:border-white/5'
+                }`}
+              >
+                <div className="size-16 rounded-full overflow-hidden bg-gray-100 dark:bg-white/5 shrink-0 border-2 border-white/50 dark:border-white/10 shadow-sm">
+                  {p.imageUrl ? (
+                    <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-2xl font-black text-gray-400" style={{ color: p.color }}>
+                      {p.name.charAt(0)}
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 text-left">
+                  <h3 className="font-bold text-slate-900 dark:text-white">{p.name}</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{p.role}</p>
+                </div>
+                <span className="material-symbols-outlined text-gray-300">chevron_right</span>
+              </button>
+            ))}
+            
+            <button
+              onClick={() => {
+                setBooking(prev => ({ ...prev, selectedProfessional: undefined }));
+                onNext();
+              }}
+              className="w-full flex items-center gap-4 p-4 rounded-2xl bg-gray-50 dark:bg-white/5 border border-dashed border-gray-300 dark:border-white/10 transition-all hover:bg-gray-100 dark:hover:bg-white/10"
+            >
+              <div className="size-16 rounded-full flex items-center justify-center bg-gray-200 dark:bg-white/10 text-gray-500 shrink-0">
+                <span className="material-symbols-outlined text-3xl">people</span>
+              </div>
+              <div className="flex-1 text-left">
+                <h3 className="font-bold text-slate-700 dark:text-gray-300">Tanto faz</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Qualquer profissional disponível</p>
+              </div>
+            </button>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+};
+
+const AdminProfessionalsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+  const [profs, setProfs] = useState<Professional[]>([]);
+  const [editing, setEditing] = useState<Partial<Professional> | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const fetchProfs = async () => {
+    const { data } = await supabase.from('professionals').select('*').order('created_at', { ascending: true });
+    if (data) {
+      setProfs(data.map((p: any) => ({
+        ...p,
+        imageUrl: p.image_url,
+        isActive: p.is_active
+      })));
+    }
+  };
+
+  useEffect(() => { fetchProfs(); }, []);
+
+  const handleSave = async () => {
+    if (!editing?.name) return alert('Nome é obrigatório');
+    setLoading(true);
+    
+    const payload = {
+      name: editing.name,
+      role: editing.role,
+      bio: editing.bio,
+      image_url: editing.imageUrl,
+      color: editing.color || '#7c3aed',
+      is_active: editing.isActive !== false
+    };
+
+    let error;
+    if (editing.id) {
+      const { error: err } = await supabase.from('professionals').update(payload).eq('id', editing.id);
+      error = err;
+    } else {
+      const { error: err } = await supabase.from('professionals').insert(payload);
+      error = err;
+    }
+
+    setLoading(false);
+    if (error) alert('Erro ao salvar: ' + error.message);
+    else {
+      setEditing(null);
+      fetchProfs();
+    }
+  };
+
+  const toggleActive = async (id: string, current: boolean) => {
+    await supabase.from('professionals').update({ is_active: !current }).eq('id', id);
+    fetchProfs();
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!window.confirm(`Tem certeza que deseja remover ${name}? Todos os agendamentos e horários vinculados a este profissional serão afetados.`)) return;
+    
+    setLoading(true);
+    const { error } = await supabase.from('professionals').delete().eq('id', id);
+    setLoading(false);
+    
+    if (error) alert('Erro ao excluir: ' + error.message);
+    else fetchProfs();
+  };
+
+  return (
+    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col transition-colors">
+      <header className="sticky top-0 z-50 p-4 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 flex items-center justify-between backdrop-blur-md transition-colors">
+        <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400"><span className="material-symbols-outlined">arrow_back</span></button>
+        <h2 className="font-bold text-slate-900 dark:text-white">Equipe</h2>
+        <button onClick={() => setEditing({ isActive: true, color: '#7c3aed' })} className="size-10 rounded-full bg-primary text-white flex items-center justify-center shadow-lg shadow-primary/20"><span className="material-symbols-outlined">add</span></button>
+      </header>
+
+      <main className="p-4 space-y-4 max-w-2xl mx-auto w-full">
+        {profs.map(p => (
+          <div key={p.id} className="bg-white dark:bg-surface-dark p-4 rounded-2xl border border-gray-100 dark:border-white/5 flex items-center gap-4 group transition-all hover:border-primary/30">
+            <div className="size-14 rounded-full bg-gray-100 dark:bg-white/5 shrink-0 flex items-center justify-center border-2" style={{ borderColor: p.color }}>
+              {p.imageUrl ? <img src={p.imageUrl} className="w-full h-full rounded-full object-cover" /> : <span className="material-symbols-outlined text-2xl text-gray-400">person</span>}
+            </div>
+            <div className="flex-1">
+              <h3 className="font-bold text-slate-900 dark:text-white">{p.name}</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{p.role}</p>
+            </div>
+            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button onClick={() => toggleActive(p.id, p.isActive)} className={`size-10 rounded-xl flex items-center justify-center transition-colors ${p.isActive ? 'bg-green-500/10 text-green-500' : 'bg-gray-100 dark:bg-white/5 text-gray-400'}`}>
+                <span className="material-symbols-outlined text-xl">{p.isActive ? 'check_circle' : 'do_not_disturb_on'}</span>
+              </button>
+              <button onClick={() => setEditing(p)} className="size-10 bg-blue-500/10 text-blue-500 rounded-xl flex items-center justify-center">
+                <span className="material-symbols-outlined text-xl">edit</span>
+              </button>
+              <button onClick={() => handleDelete(p.id, p.name)} className="size-10 bg-red-500/10 text-red-500 rounded-xl flex items-center justify-center">
+                <span className="material-symbols-outlined text-xl">delete</span>
+              </button>
+            </div>
+          </div>
+        ))}
+      </main>
+
+      {editing && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl animate-scale-up border border-gray-100 dark:border-white/10">
+            <h3 className="text-2xl font-black mb-6 text-slate-900 dark:text-white">{editing.id ? 'Editar Profissional' : 'Novo Profissional'}</h3>
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-gray-400 px-1">Nome</label>
+                <input value={editing.name || ''} onChange={e => setEditing({...editing, name: e.target.value})} className="w-full bg-gray-50 dark:bg-background-dark p-3 rounded-xl border-transparent focus:ring-primary focus:bg-white transition-all text-sm" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-gray-400 px-1">Cargo/Especialidade</label>
+                <input value={editing.role || ''} onChange={e => setEditing({...editing, role: e.target.value})} className="w-full bg-gray-50 dark:bg-background-dark p-3 rounded-xl border-transparent focus:ring-primary focus:bg-white transition-all text-sm" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-gray-400 px-1">Cor no Calendário</label>
+                <div className="flex gap-2">
+                  {['#7c3aed', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444'].map(c => (
+                    <button key={c} onClick={() => setEditing({...editing, color: c})} className={`size-8 rounded-full transition-transform ${editing.color === c ? 'scale-125 ring-2 ring-offset-2 ring-primary dark:ring-offset-surface-dark' : 'hover:scale-110'}`} style={{ backgroundColor: c }} />
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-3 pt-6">
+                <button onClick={() => setEditing(null)} className="flex-1 py-4 text-gray-500 font-bold hover:bg-black/5 dark:hover:bg-white/5 rounded-2xl transition-colors">Cancelar</button>
+                <button onClick={handleSave} disabled={loading} className="flex-1 py-4 bg-primary text-white rounded-2xl font-bold shadow-lg shadow-primary/20 hover:bg-primary-dark transition-all disabled:opacity-50">
+                  {loading ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const AdminProductsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Partial<Product>>({});
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const fetchProducts = async () => {
+    const { data } = await supabase.from('products').select('*').eq('is_active', true).order('display_order', { ascending: true });
+    if (data) setProducts(data.map((p: any) => ({ ...p, imageUrl: p.image_url, isActive: p.is_active })));
+  };
+
+  useEffect(() => { fetchProducts(); }, []);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const { data, error } = await supabase.storage.from('services').upload(fileName, file);
+      if (error) throw error;
+      const { data: { publicUrl } } = supabase.storage.from('services').getPublicUrl(fileName);
+      setEditingProduct({ ...editingProduct, imageUrl: publicUrl });
+    } catch (err: any) {
+      alert('Erro ao carregar imagem: ' + err.message);
+    } finally { setUploading(false); }
+  };
+
+  const handleSave = async () => {
+    if (!editingProduct.name || !editingProduct.price) return;
+    setLoading(true);
+    const payload = {
+      name: editingProduct.name,
+      description: editingProduct.description,
+      price: editingProduct.price,
+      image_url: editingProduct.imageUrl,
+      stock_quantity: editingProduct.stock_quantity || 0,
+      display_order: editingProduct.display_order || 0,
+      is_active: true
+    };
+    const { error } = editingProduct.id 
+      ? await supabase.from('products').update(payload).eq('id', editingProduct.id)
+      : await supabase.from('products').insert(payload);
+    
+    setLoading(false);
+    if (error) alert('Erro ao salvar produto');
+    else { setIsEditing(false); setEditingProduct({}); fetchProducts(); }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Excluir este produto?')) return;
+    await supabase.from('products').update({ is_active: false }).eq('id', id);
+    fetchProducts();
+  };
+
+  if (isEditing) {
+    return (
+      <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen transition-colors p-6">
+        <div className="max-w-md mx-auto w-full">
+          <div className="flex items-center mb-8">
+            <button onClick={() => setIsEditing(false)} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500"><span className="material-symbols-outlined">arrow_back</span></button>
+            <h2 className="text-xl font-bold ml-2 text-slate-900 dark:text-white">{editingProduct.id ? 'Editar Produto' : 'Novo Produto'}</h2>
+          </div>
+          <div className="space-y-4">
+            <div className="relative group mx-auto size-32 rounded-2xl bg-gray-100 dark:bg-white/5 border-2 border-dashed border-gray-300 dark:border-white/10 overflow-hidden flex items-center justify-center">
+              {editingProduct.imageUrl ? (
+                <img src={editingProduct.imageUrl} className="w-full h-full object-cover" />
+              ) : (
+                <span className="material-symbols-outlined text-gray-400">add_a_photo</span>
+              )}
+              {uploading && <div className="absolute inset-0 bg-white/50 dark:bg-black/50 flex items-center justify-center"><div className="animate-spin size-6 border-4 border-primary border-t-transparent rounded-full" /></div>}
+              <input type="file" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+            </div>
+            <input placeholder="Nome do Produto" value={editingProduct.name || ''} onChange={e => setEditingProduct({ ...editingProduct, name: e.target.value })} className="w-full bg-white dark:bg-surface-dark p-4 rounded-xl border border-gray-200 dark:border-white/10 shadow-sm" />
+            <textarea placeholder="Descrição" value={editingProduct.description || ''} onChange={e => setEditingProduct({ ...editingProduct, description: e.target.value })} className="w-full bg-white dark:bg-surface-dark p-4 rounded-xl border border-gray-200 dark:border-white/10 shadow-sm h-24" />
+            <div className="grid grid-cols-2 gap-4">
+              <input type="number" placeholder="Preço" value={editingProduct.price || ''} onChange={e => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) })} className="w-full bg-white dark:bg-surface-dark p-4 rounded-xl border border-gray-200 dark:border-white/10 shadow-sm" />
+              <input type="number" placeholder="Estoque" value={editingProduct.stock_quantity || ''} onChange={e => setEditingProduct({ ...editingProduct, stock_quantity: parseInt(e.target.value) })} className="w-full bg-white dark:bg-surface-dark p-4 rounded-xl border border-gray-200 dark:border-white/10 shadow-sm" />
+            </div>
+            <button onClick={handleSave} disabled={loading} className="w-full py-4 bg-primary text-white font-bold rounded-xl shadow-lg disabled:opacity-50">{loading ? 'Salvando...' : 'Salvar Produto'}</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen transition-colors">
+      <header className="sticky top-0 z-50 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md p-4">
+        <div className="max-w-md mx-auto w-full flex items-center justify-between">
+          <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500"><span className="material-symbols-outlined">arrow_back</span></button>
+          <h2 className="font-bold text-slate-900 dark:text-white">Gerenciar Vitrine</h2>
+          <button onClick={() => { setEditingProduct({}); setIsEditing(true); }} className="size-10 rounded-full bg-primary text-white flex items-center justify-center shadow-lg"><span className="material-symbols-outlined">add</span></button>
+        </div>
+      </header>
+      <main className="p-4 space-y-4 max-w-md mx-auto">
+        {products.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+            <span className="material-symbols-outlined text-6xl mb-2">shopping_basket</span>
+            <p>Nenhum produto cadastrado.</p>
+          </div>
+        )}
+        {products.map(p => (
+          <div key={p.id} className="bg-white dark:bg-surface-dark p-4 rounded-2xl border border-gray-200 dark:border-white/5 flex gap-4 shadow-sm hover:border-primary/20 transition-all">
+            <div className="size-20 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 shrink-0">
+              <img src={p.imageUrl} className="w-full h-full object-cover" onError={e => e.currentTarget.src = 'https://via.placeholder.com/80'} />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-bold text-slate-900 dark:text-white">{p.name}</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">{p.description}</p>
+              <div className="flex justify-between items-center mt-2">
+                <span className="text-primary font-bold text-lg">R$ {p.price.toFixed(2)}</span>
+                <div className="flex gap-2">
+                  <button onClick={() => { setEditingProduct(p); setIsEditing(true); }} className="size-8 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center hover:bg-blue-500/20 transition-colors"><span className="material-symbols-outlined text-sm">edit</span></button>
+                  <button onClick={() => handleDelete(p.id)} className="size-8 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center hover:bg-red-500/20 transition-colors"><span className="material-symbols-outlined text-sm">delete</span></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </main>
+    </div>
+  );
+};
+
+const ProductShowcaseScreen: React.FC<{ products: Product[]; onBack: () => void }> = ({ products, onBack }) => {
+  const handleIWant = (product: Product) => {
+    const text = `Olá Adriana! Vi o produto *${product.name}* na vitrine do seu app e tenho interesse!`;
+    window.open(`https://wa.me/5582996096247?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  return (
+    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen transition-colors">
+      <header className="sticky top-0 z-50 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md p-4">
+        <div className="max-w-md mx-auto w-full flex items-center">
+          <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500"><span className="material-symbols-outlined font-bold">arrow_back</span></button>
+          <h2 className="font-bold text-slate-900 dark:text-white ml-2 text-lg">Produtos</h2>
+        </div>
+      </header>
+      <main className="p-4 grid grid-cols-2 gap-4 max-w-md mx-auto pb-24">
+        {products.length === 0 && (
+          <div className="col-span-2 flex flex-col items-center justify-center py-20 text-gray-400">
+            <span className="material-symbols-outlined text-6xl mb-2">inventory_2</span>
+            <p className="font-medium">Nenhum produto disponível no momento.</p>
+          </div>
+        )}
+        {products.map(p => (
+          <div key={p.id} className="bg-white dark:bg-surface-dark rounded-3xl border border-gray-100 dark:border-white/5 overflow-hidden shadow-sm flex flex-col hover:border-primary/20 transition-all group">
+            <div className="aspect-square bg-gray-100 dark:bg-gray-800 relative overflow-hidden">
+              <img src={p.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" onError={e => e.currentTarget.src = 'https://via.placeholder.com/200'} />
+              <div className="absolute top-2 right-2 px-2 py-1 bg-white/90 dark:bg-black/60 backdrop-blur-md rounded-lg text-[10px] font-bold text-primary shadow-sm">
+                R$ {p.price.toFixed(2)}
+              </div>
+            </div>
+            <div className="p-3 flex flex-col flex-1">
+              <h3 className="font-bold text-sm text-slate-900 dark:text-white line-clamp-1">{p.name}</h3>
+              <p className="text-[10px] text-gray-500 dark:text-gray-400 line-clamp-2 mt-1 mb-3 flex-1 font-medium">{p.description}</p>
+              <button 
+                onClick={() => handleIWant(p)}
+                className="w-full py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl text-[10px] font-bold flex items-center justify-center gap-1 transition-all shadow-lg shadow-green-500/10 active:scale-95"
+              >
+                <span className="material-symbols-outlined text-sm">shopping_bag</span> Eu quero
+              </button>
+            </div>
+          </div>
+        ))}
+      </main>
     </div>
   );
 };
@@ -4196,6 +5293,18 @@ const App: React.FC = () => {
   const lastAppointmentsDataStringRef = useRef<string | null>(null);
 
   const [services, setServices] = useState<Service[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [booking, setBooking] = useState<BookingState>({
+    customerName: '',
+    customerPhone: '',
+    selectedServices: [],
+    selectedCategory: undefined,
+    selectedDate: '',
+    selectedTime: '',
+    selectedProfessional: undefined,
+  });
 
   // Check for persistent login
   useEffect(() => {
@@ -4233,6 +5342,17 @@ const App: React.FC = () => {
       }
     });
 
+    // CUSTOMER IDENTITY INITIALIZATION
+    const savedPhone = localStorage.getItem('customer_phone');
+    const savedName = localStorage.getItem('customer_name');
+    if (savedPhone) {
+      setBooking(prev => ({ 
+        ...prev, 
+        customerPhone: savedPhone,
+        customerName: savedName || prev.customerName 
+      }));
+    }
+
     return () => {
       authListener.subscription.unsubscribe();
     };
@@ -4246,6 +5366,11 @@ const App: React.FC = () => {
   }, [currentUserRole]);
 
   /* Refactored fetchServicesList to be reused */
+  const fetchCategories = async () => {
+    const { data } = await supabase.from('service_categories').select('*').order('display_order', { ascending: true });
+    if (data) setCategories(data);
+  };
+
   const fetchServicesList = async () => {
     const { data } = await supabase.from('services').select('*').eq('is_active', true).order('display_order', { ascending: true });
     if (data) {
@@ -4257,18 +5382,37 @@ const App: React.FC = () => {
     }
   };
 
+
+  const fetchProfessionals = async () => {
+    const { data } = await supabase.from('professionals').select('*').eq('is_active', true).order('created_at', { ascending: true });
+    if (data) {
+      setProfessionals(data.map((p: any) => ({
+        ...p,
+        imageUrl: p.image_url,
+        isActive: p.is_active
+      })));
+    }
+  };
+
+  const fetchProducts = async () => {
+    const { data } = await supabase.from('products').select('*').eq('is_active', true).order('display_order', { ascending: true });
+    if (data) {
+      setProducts(data.map((p: any) => ({
+        ...p,
+        imageUrl: p.image_url,
+        isActive: p.is_active
+      })));
+    }
+  };
+
   useEffect(() => {
+    fetchCategories();
     fetchServicesList();
-  }, []);
+    fetchProfessionals();
+    fetchAppointments();
+    fetchProducts();
+  }, [booking.customerPhone]);
 
-
-  const [booking, setBooking] = useState<BookingState>({
-    customerName: '',
-    customerPhone: '',
-    selectedServices: [],
-    selectedDate: '',
-    selectedTime: '',
-  });
 
   const [selectedChatClient, setSelectedChatClient] = useState<{ id: string, name: string } | null>(null);
 
@@ -4382,7 +5526,8 @@ const App: React.FC = () => {
     if (currentUserRole === 'CUSTOMER') {
       query = query.eq('clients.phone', normalizedPhone);
       if (!showPastHistory) {
-        query = query.gte('appointment_date', today);
+        const ninetyDaysAgo = format(addDays(new Date(), -90), 'yyyy-MM-dd');
+        query = query.gte('appointment_date', ninetyDaysAgo);
       }
     } else {
       // Admin: 
@@ -4497,6 +5642,7 @@ const App: React.FC = () => {
             ...s.service,
             imageUrl: s.service.image_url
           })),
+          professionalId: a.professional_id,
           clientSubscription
         };
       });
@@ -4603,15 +5749,21 @@ const App: React.FC = () => {
     const { data: clientData } = await supabase.from('clients').select('id').eq('phone', phoneDigits).single();
     if (clientData) {
       clientId = clientData.id;
+      if (booking.birthDate) {
+        await supabase.from('clients').update({ birth_date: booking.birthDate }).eq('id', clientId);
+      }
     } else {
       // Fallback for existing clients with formatting
-      const { data: allClients } = await supabase.from('clients').select('id, phone');
+      const { data: allClients } = await supabase.from('clients').select('id, phone, birth_date');
       const existing = allClients?.find(c => c.phone.replace(/\D/g, '') === phoneDigits);
 
       if (existing) {
         clientId = existing.id;
+        if (booking.birthDate && !existing.birth_date) {
+            await supabase.from('clients').update({ birth_date: booking.birthDate }).eq('id', clientId);
+        }
       } else {
-        const { data: newClient, error: clientError } = await supabase.from('clients').insert({ name: booking.customerName, phone: phoneDigits }).select().single();
+        const { data: newClient, error: clientError } = await supabase.from('clients').insert({ name: booking.customerName, phone: phoneDigits, birth_date: booking.birthDate }).select().single();
         if (clientError || !newClient) { alert('Erro ao salvar cliente'); return; }
         clientId = newClient.id;
       }
@@ -4659,6 +5811,7 @@ const App: React.FC = () => {
 
     const { data: appData, error: appError } = await supabase.from('appointments').insert({
       client_id: clientId,
+      professional_id: booking.selectedProfessional?.id,
       appointment_date: booking.selectedDate,
       appointment_time: booking.selectedTime,
       total_price: finalPrice,
@@ -4676,6 +5829,8 @@ const App: React.FC = () => {
     await supabase.from('appointment_services').insert(serviceInserts);
 
     // Success
+    localStorage.setItem('customer_phone', phoneDigits);
+    localStorage.setItem('customer_name', booking.customerName);
     setShowSuccess(true);
     setBooking(prev => ({
       ...prev,
@@ -4697,8 +5852,8 @@ const App: React.FC = () => {
       case 'HOME':
         return <HomeScreen
           onAgendar={() => {
-            fetchServicesList(); // Refresh info
-            setView('SELECT_SERVICES');
+            fetchCategories();
+            setView('SELECT_CATEGORY');
           }}
           onChat={() => { setCurrentUserRole('CUSTOMER'); setView('CHAT'); }}
           onPerfil={() => {
@@ -4706,21 +5861,41 @@ const App: React.FC = () => {
           }}
           onMais={handleLogout}
           onAssinatura={() => setView('SELECT_PLAN')}
+          onProducts={() => setView('PRODUCTS')}
+        />;
+      case 'SELECT_CATEGORY':
+        return <SelectCategoryScreen
+          categories={categories}
+          booking={booking}
+          setBooking={setBooking}
+          onNext={() => {
+            fetchServicesList();
+            setView('SELECT_SERVICES');
+          }}
+          onBack={() => setView('HOME')}
         />;
       case 'SELECT_SERVICES':
         return <SelectServicesScreen
           booking={booking}
           setBooking={setBooking}
-          onNext={() => setView('SELECT_DATE_TIME')}
-          onBack={() => setView('HOME')}
+          onNext={() => setView('SELECT_PROFESSIONAL')}
+          onBack={() => setView('SELECT_CATEGORY')}
           services={services}
+        />;
+      case 'SELECT_PROFESSIONAL':
+        return <SelectProfessionalScreen
+          booking={booking}
+          setBooking={setBooking}
+          onNext={() => setView('SELECT_DATE_TIME')}
+          onBack={() => setView('SELECT_SERVICES')}
+          professionals={professionals}
         />;
       case 'SELECT_DATE_TIME':
         return <SelectDateTimeScreen
           booking={booking}
           setBooking={setBooking}
           onNext={() => setView('REVIEW')}
-          onBack={() => setView('SELECT_SERVICES')}
+          onBack={() => setView('SELECT_PROFESSIONAL')}
         />;
       case 'REVIEW':
         return <ReviewScreen
@@ -4744,21 +5919,26 @@ const App: React.FC = () => {
           appointments={appointments}
           showPastHistory={showPastHistory}
           setShowPastHistory={setShowPastHistory}
-          unreadCount={unreadCount}
           onLogout={handleLogout}
-          onOpenChat={() => { setCurrentUserRole('BARBER'); setView('ADMIN_CHAT_LIST'); }}
+          onOpenChat={() => setView('ADMIN_CHAT')}
           onManageServices={() => setView('ADMIN_SERVICES')}
           onBlockSchedule={() => setView('ADMIN_BLOCK_SCHEDULE')}
           onSettings={() => setView('ADMIN_SETTINGS')}
           onWeeklySchedule={() => setView('ADMIN_WEEKLY_SCHEDULE')}
           onFinance={() => setView('ADMIN_FINANCE')}
           onTV={() => setView('ADMIN_TV')}
+          unreadCount={unreadCount}
           onSubscriptions={() => setView('ADMIN_SUBSCRIPTIONS')}
           onManagePlans={() => setView('ADMIN_MANAGE_PLANS')}
+          onManageProducts={() => setView('ADMIN_PRODUCTS')}
           onRefresh={fetchAppointments}
           onClients={() => setView('ADMIN_CLIENTS')}
+          onProfessionals={() => setView('ADMIN_PROFESSIONALS')}
           setAppointments={setAppointments}
+          professionals={professionals}
         />;
+      case 'ADMIN_PROFESSIONALS':
+        return <AdminProfessionalsScreen onBack={() => { fetchProfessionals(); setView('ADMIN_DASHBOARD'); }} />;
       case 'ADMIN_SERVICES':
         return <AdminServicesScreen onBack={() => setView('ADMIN_DASHBOARD')} />;
       case 'ADMIN_BLOCK_SCHEDULE':
@@ -4771,6 +5951,10 @@ const App: React.FC = () => {
         return <AdminFinanceScreen onBack={() => setView('ADMIN_DASHBOARD')} />;
       case 'ADMIN_TV':
         return <AdminTVScreen appointments={appointments} onRefresh={fetchAppointments} onBack={() => setView('ADMIN_DASHBOARD')} />;
+      case 'ADMIN_PRODUCTS':
+        return <AdminProductsScreen onBack={() => setView('ADMIN_DASHBOARD')} />;
+      case 'PRODUCTS':
+        return <ProductShowcaseScreen products={products} onBack={() => setView('HOME')} />;
       case 'ADMIN_CHAT_LIST':
         return <AdminChatListScreen
           onBack={() => setView('ADMIN_DASHBOARD')}
@@ -4795,8 +5979,10 @@ const App: React.FC = () => {
       case 'CUSTOMER_LOGIN':
         return <CustomerLoginScreen
           onLogin={(phone) => {
+            localStorage.setItem('customer_phone', phone);
             setBooking(prev => ({ ...prev, customerPhone: phone }));
             setView('MY_APPOINTMENTS');
+            // fetchAppointments will be triggered by useEffect dependency on customerPhone
           }}
           onBack={() => setView('HOME')}
         />;
