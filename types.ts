@@ -5,6 +5,7 @@ export type AppView =
   | 'SELECT_CATEGORY'
   | 'SELECT_SERVICES'
   | 'SELECT_DATE_TIME'
+  | 'CUSTOMER_INFO'
   | 'REVIEW'
   | 'MY_APPOINTMENTS'
   | 'LOGIN'
@@ -18,12 +19,14 @@ export type AppView =
   | 'ADMIN_TV'
   | 'SELECT_PLAN'
   | 'SUBSCRIPTION_PAYMENT'
-  | 'ADMIN_SUBSCRIPTIONS'
-  | 'ADMIN_MANAGE_PLANS'
   | 'ADMIN_PROFESSIONALS'
   | 'SELECT_PROFESSIONAL'
   | 'ADMIN_PRODUCTS'
-  | 'PRODUCTS';
+  | 'PRODUCTS'
+  | 'ADMIN_WEEKLY_SCHEDULE'
+  | 'CUSTOMER_LOGIN'
+  | 'ADMIN_CLIENTS'
+  | 'ADMIN_CLUB';
 
 export interface SubscriptionPlan {
   id: string;
@@ -67,6 +70,7 @@ export interface Professional {
   imageUrl?: string;
   color: string;
   isActive: boolean;
+  categories?: string[];
   created_at?: string;
 }
 

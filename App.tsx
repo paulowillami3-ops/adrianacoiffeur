@@ -1,13 +1,14 @@
 import ReloadPrompt from './src/ReloadPrompt';
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { BrowserRouter, Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { AppView, Service, BookingState, Appointment, ChatMessage, SubscriptionPlan, UserSubscription, Professional, Category, Product } from './types';
 import { SERVICES } from './constants';
 import { supabase } from './src/supabase';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { format, addDays, startOfDay, addMinutes, differenceInMinutes, parseISO, isSameDay } from 'date-fns';
+import { format, addDays, startOfDay, addMinutes, differenceInMinutes, parseISO, isSameDay, startOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { formatDateToBRL } from './src/utils';
 
@@ -96,10 +97,14 @@ const AdminClientsScreen: React.FC<{ onBack: () => void; onChat: (id: string, na
     if (error) console.error('Error fetching clients:', error);
     else if (data) {
       // Filter for approved subscriptions
-      const processed = data.map(c => ({
-        ...c,
-        active_plan: (c.subscriptions as any[])?.find(s => s.status === 'APPROVED')?.plan?.name
-      }));
+      const processed = data.map(c => {
+        const subs = Array.isArray(c.subscriptions) ? c.subscriptions : [];
+        const activeSub = subs.find((s: any) => s.status === 'APPROVED');
+        return {
+          ...c,
+          active_plan: activeSub?.plan?.name
+        };
+      });
       setClients(processed);
     }
   };
@@ -124,7 +129,7 @@ const AdminClientsScreen: React.FC<{ onBack: () => void; onChat: (id: string, na
 
   const handleUpdate = async () => {
     if (!editingClient) return;
-    const normalizedPhone = editingClient.phone.replace(/\D/g, '');
+    const normalizedPhone = (editingClient.phone || '').replace(/\D/g, '');
 
     // Check for duplicate phone
     const { data: duplicateClient, error: checkError } = await supabase
@@ -163,16 +168,22 @@ const AdminClientsScreen: React.FC<{ onBack: () => void; onChat: (id: string, na
 
   const filtered = clients.filter(c => {
     const searchLower = search.toLowerCase();
-    const nameMatch = c.name.toLowerCase().includes(searchLower);
+    const nameStr = c.name || '';
+    const nameMatch = nameStr.toLowerCase().includes(searchLower);
+    
+    const phoneStr = c.phone || '';
     const searchDigits = search.replace(/\D/g, '');
-    const phoneMatch = searchDigits ? c.phone.includes(searchDigits) : false;
+    const phoneMatch = searchDigits ? phoneStr.includes(searchDigits) : false;
     
     let birthdayMatch = true;
     if (showBirthdaysOnly) {
       if (!c.birth_date) return false;
-      // Usar parseISO para garantir mês correto sem deslocamento
-      const bMonth = parseISO(c.birth_date).getMonth() + 1;
-      birthdayMatch = (bMonth === currentMonth);
+      try {
+        const bMonth = parseISO(c.birth_date).getMonth() + 1;
+        birthdayMatch = (bMonth === currentMonth);
+      } catch (e) {
+        return false;
+      }
     }
     
     return (nameMatch || phoneMatch) && birthdayMatch;
@@ -214,7 +225,7 @@ const AdminClientsScreen: React.FC<{ onBack: () => void; onChat: (id: string, na
           <div key={c.id} className="bg-white dark:bg-surface-dark p-4 rounded-xl border border-gray-200 dark:border-white/5 flex flex-col gap-4 transition-colors">
             <div className="flex items-center gap-4">
               <div className="size-10 rounded-full bg-gray-100 dark:bg-white/5 flex items-center justify-center text-gray-500 font-bold uppercase relative">
-                {c.name.charAt(0)}
+                {(c.name || '?').charAt(0)}
                 {c.active_plan && (
                   <div className="absolute -top-1 -right-1 size-5 bg-primary-dark rounded-full flex items-center justify-center text-white border-2 border-white dark:border-surface-dark shadow-sm">
                     <span className="material-symbols-outlined text-[10px] font-black">workspace_premium</span>
@@ -232,16 +243,22 @@ const AdminClientsScreen: React.FC<{ onBack: () => void; onChat: (id: string, na
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">{c.phone}</p>
                 <div className="flex items-center gap-3 mt-0.5">
-                  {c.birth_date && (
-                     <p className="text-[10px] text-amber-600 dark:text-amber-500 font-bold flex items-center gap-1">
-                       <span className="material-symbols-outlined text-[12px]">cake</span>
-                       {format(parseISO(c.birth_date), 'dd/MM/yyyy')}
-                     </p>
-                  )}
+                  {c.birth_date && (() => {
+                     try {
+                       const d = parseISO(c.birth_date);
+                       if (isNaN(d.getTime())) return null;
+                       return (
+                        <p className="text-[10px] text-amber-600 dark:text-amber-500 font-bold flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[12px]">cake</span>
+                          {format(d, 'dd/MM/yyyy')}
+                        </p>
+                       );
+                     } catch(e) { return null; }
+                  })()}
                   {c.instagram && (
                      <p className="text-[10px] text-pink-600 dark:text-pink-400 font-bold flex items-center gap-1 truncate max-w-[100px]">
                        <span className="material-symbols-outlined text-[12px]">alternate_email</span>
-                       {c.instagram.replace('@', '')}
+                       {String(c.instagram).replace('@', '')}
                      </p>
                   )}
                 </div>
@@ -341,24 +358,36 @@ const AdminClientsScreen: React.FC<{ onBack: () => void; onChat: (id: string, na
                   ) : clientHistory.length === 0 ? (
                     <div className="text-center py-8 text-gray-400 text-sm">Nenhum agendamento encontrado.</div>
                   ) : (
-                    clientHistory.map(app => (
-                      <div key={app.id} className="bg-gray-50 dark:bg-background-dark p-3 rounded-xl border border-gray-200 dark:border-white/5">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="font-bold text-sm text-slate-900 dark:text-white">
-                            {format(parseISO(app.appointment_date), 'dd/MM/yyyy')} às {app.appointment_time.slice(0,5)}
-                          </span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase ${app.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : app.status === 'CANCELLED' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
-                            {app.status}
-                          </span>
+                    clientHistory.map(app => {
+                      const appDate = app.appointment_date;
+                      const appTime = app.appointment_time || '';
+                      let formattedDate = 'Data inválida';
+                      try {
+                        const d = parseISO(appDate);
+                        if (!isNaN(d.getTime())) {
+                          formattedDate = format(d, 'dd/MM/yyyy');
+                        }
+                      } catch (e) {}
+
+                      return (
+                        <div key={app.id} className="bg-gray-50 dark:bg-background-dark p-3 rounded-xl border border-gray-200 dark:border-white/5">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-bold text-sm text-slate-900 dark:text-white">
+                              {formattedDate} às {appTime.slice(0, 5)}
+                            </span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase ${app.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : app.status === 'CANCELLED' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                              {app.status}
+                            </span>
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            {app.appointment_services?.map((as: any) => as.services?.name).join(', ') || 'Serviço não identificado'}
+                          </div>
+                          <div className="text-xs font-bold text-slate-900 dark:text-white mt-2 text-right">
+                            {app.total_price ? `R$ ${app.total_price.toFixed(2)}` : '--'}
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          {app.appointment_services?.map((as:any) => as.services?.name).join(', ')}
-                        </div>
-                        <div className="text-xs font-bold text-slate-900 dark:text-white mt-2 text-right">
-                          {app.total_price ? `R$ ${app.total_price.toFixed(2)}` : '--'}
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               )}
@@ -474,7 +503,7 @@ const LandingScreen: React.FC<{ onStart: () => void; onAdmin: () => void }> = ({
               width="80"
               height="80"
               loading="eager"
-              fetchpriority="high"
+              fetchPriority="high"
               decoding="async"
               className="h-full w-auto object-contain" 
               onError={e => (e.currentTarget.src = '/logo-icon.png')} 
@@ -545,7 +574,7 @@ const LandingScreen: React.FC<{ onStart: () => void; onAdmin: () => void }> = ({
                alt="Adriana" 
                width="450"
                height="580"
-               fetchpriority="high"
+               fetchPriority="high"
                loading="eager"
                decoding="sync"
                className="w-full h-auto drop-shadow-2xl relative z-10" 
@@ -568,7 +597,7 @@ const LandingScreen: React.FC<{ onStart: () => void; onAdmin: () => void }> = ({
             alt="Adriana Coiffeur" 
             width="380"
             height="120"
-            fetchpriority="high"
+            fetchPriority="high"
             loading="eager"
             decoding="async"
             className="w-full h-auto drop-shadow-lg" 
@@ -887,7 +916,12 @@ const HomeScreen: React.FC<{
         <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Vamos agendar o seu<br />corte?</h1>
       </div>
       <div className="grid grid-cols-2 gap-3 mb-6">
-        <button onClick={onAgendar} className="relative group flex flex-col items-start justify-end p-4 h-40 w-full rounded-2xl overflow-hidden shadow-lg hover:shadow-xl active:scale-[0.98] transition-all">
+        <motion.button
+          whileHover={{ scale: 1.02, y: -2 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={onAgendar}
+          className="relative group flex flex-col items-start justify-end p-4 h-40 w-full rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all glass-effect"
+        >
           <div className="absolute inset-0 z-0">
             <img 
               alt="Agendamento" 
@@ -896,19 +930,24 @@ const HomeScreen: React.FC<{
               height="160"
               loading="lazy"
               decoding="async"
-              className="h-full w-full object-cover" 
+              className="h-full w-full object-cover group-hover:scale-110 transition-transform duration-700" 
               onError={e => (e.currentTarget.src = '/agendamento.png')} 
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent"></div>
           </div>
           <div className="relative z-10 flex flex-col items-start gap-1">
-            <div className="mb-1 rounded-full bg-primary p-2 text-white">
+            <div className="mb-1 rounded-full bg-primary p-2 text-white shadow-lg shadow-primary/20">
               <span className="material-symbols-outlined text-[20px]">calendar_today</span>
             </div>
             <span className="text-left text-sm font-bold leading-tight text-white">Fazer o meu agendamento</span>
           </div>
-        </button>
-        <button onClick={onChat} className="relative group flex flex-col items-start justify-end p-4 h-40 w-full rounded-2xl overflow-hidden shadow-lg border border-gray-200 dark:border-white/5 active:scale-[0.98] transition-all">
+        </motion.button>
+        <motion.button
+          whileHover={{ scale: 1.02, y: -2 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={onChat}
+          className="relative group flex flex-col items-start justify-end p-4 h-40 w-full rounded-2xl overflow-hidden shadow-lg border border-gray-200 dark:border-white/5 transition-all glass-effect"
+        >
           <div className="absolute inset-0 z-0">
             <img 
               alt="Adriana" 
@@ -917,7 +956,7 @@ const HomeScreen: React.FC<{
               height="160"
               loading="lazy"
               decoding="async"
-              className="h-full w-full object-cover" 
+              className="h-full w-full object-cover group-hover:scale-110 transition-transform duration-700" 
               onError={e => (e.currentTarget.src = '/adriana.png')} 
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent"></div>
@@ -928,8 +967,13 @@ const HomeScreen: React.FC<{
             </div>
             <span className="text-left text-sm font-bold leading-tight text-white">Falar com Adriana</span>
           </div>
-        </button>
-        <button onClick={onAssinatura} className="relative group flex flex-col items-start justify-end h-32 w-full rounded-2xl overflow-hidden shadow-lg border border-gray-200 dark:border-white/5 active:scale-[0.98] transition-all col-span-2">
+        </motion.button>
+        <motion.button
+          whileHover={{ scale: 1.01 }}
+          whileTap={{ scale: 0.99 }}
+          onClick={onAssinatura}
+          className="relative group flex flex-col items-start justify-end h-32 w-full rounded-2xl overflow-hidden shadow-lg border border-gray-200 dark:border-white/5 transition-all col-span-2 glass-effect premium-glow"
+        >
           <div className="absolute inset-0 z-0">
             <img 
               alt="Clube do Cabelo Perfeito" 
@@ -938,23 +982,30 @@ const HomeScreen: React.FC<{
               height="128"
               loading="lazy"
               decoding="async"
-              className="h-full w-full object-cover" 
+              className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-1000" 
               onError={e => (e.currentTarget.src = '/clube.png')} 
             />
             <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors"></div>
+            <div className="absolute inset-0 animate-shimmer opacity-30"></div>
           </div>
-        </button>
-        <button onClick={onProducts} className="relative group flex flex-col items-start justify-end p-4 h-32 w-full rounded-[2rem] overflow-hidden shadow-lg bg-gradient-to-br from-pink-500 to-rose-600 active:scale-[0.98] transition-all col-span-2">
-          <div className="absolute top-0 right-0 p-4 opacity-20">
+        </motion.button>
+        <motion.button
+          whileHover={{ scale: 1.01 }}
+          whileTap={{ scale: 0.99 }}
+          onClick={onProducts}
+          className="relative group flex flex-col items-start justify-end p-4 h-32 w-full rounded-[2rem] overflow-hidden shadow-lg bg-gradient-to-br from-pink-500 to-rose-600 transition-all col-span-2 premium-glow"
+        >
+          <div className="absolute top-0 right-0 p-4 opacity-20 group-hover:scale-125 transition-transform duration-500">
              <span className="material-symbols-outlined text-6xl text-white">shopping_basket</span>
           </div>
           <div className="relative z-10 flex flex-col items-start gap-1">
-            <div className="mb-1 rounded-full bg-white/20 p-2 text-white backdrop-blur-md">
+            <div className="mb-1 rounded-full bg-white/20 p-2 text-white backdrop-blur-md shadow-lg">
               <span className="material-symbols-outlined text-[20px]">storefront</span>
             </div>
             <span className="text-left text-sm font-bold leading-tight text-white uppercase tracking-wider">Conheça nossa Vitrine</span>
           </div>
-        </button>
+          <div className="absolute inset-0 animate-shimmer opacity-20 pointer-events-none"></div>
+        </motion.button>
       </div>
       <div className="flex flex-col flex-1 items-start gap-4 text-slate-800 dark:text-white px-2">
         <div className="flex items-start gap-3">
@@ -979,18 +1030,33 @@ const HomeScreen: React.FC<{
     </main>
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 dark:border-white/10 bg-white/95 dark:bg-background-dark/95 backdrop-blur-lg pt-2 transition-colors">
       <div className="flex items-center justify-around px-2 pb-6">
-        <button onClick={onAgendar} className="flex flex-1 flex-col items-center gap-1 text-primary">
+        <motion.button 
+          whileHover={{ y: -2 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={onAgendar} 
+          className="flex flex-1 flex-col items-center gap-1 text-primary"
+        >
           <span className="material-symbols-outlined text-[24px] filled">calendar_month</span>
-          <span className="text-[10px] font-medium uppercase">Agendar</span>
-        </button>
-        <button onClick={onPerfil} className="flex flex-1 flex-col items-center gap-1 text-gray-500 hover:text-primary transition-colors">
+          <span className="text-[10px] font-bold uppercase tracking-widest">Agendar</span>
+        </motion.button>
+        <motion.button 
+          whileHover={{ y: -2 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={onPerfil} 
+          className="flex flex-1 flex-col items-center gap-1 text-gray-500 hover:text-primary transition-colors"
+        >
           <span className="material-symbols-outlined text-[24px]">calendar_month</span>
-          <span className="text-[10px] font-medium uppercase">Meus Agendamentos</span>
-        </button>
-        <button onClick={onMais} className="flex flex-1 flex-col items-center gap-1 text-gray-500 hover:text-primary transition-colors">
+          <span className="text-[10px] font-bold uppercase tracking-widest">Meus Agendamentos</span>
+        </motion.button>
+        <motion.button 
+          whileHover={{ y: -2 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={onMais} 
+          className="flex flex-1 flex-col items-center gap-1 text-gray-500 hover:text-primary transition-colors"
+        >
           <span className="material-symbols-outlined text-[24px]">logout</span>
-          <span className="text-[10px] font-medium uppercase">Sair</span>
-        </button>
+          <span className="text-[10px] font-bold uppercase tracking-widest">Sair</span>
+        </motion.button>
       </div>
     </nav>
   </div>
@@ -1021,24 +1087,26 @@ const SelectCategoryScreen: React.FC<{
           </div>
           <div className="grid grid-cols-2 gap-4">
             {categories.map((cat) => (
-              <button
+              <motion.button
+                whileHover={{ scale: 1.05, y: -5 }}
+                whileTap={{ scale: 0.95 }}
                 key={cat.id}
                 onClick={() => {
                   setBooking({ ...booking, selectedCategory: cat });
                   onNext();
                 }}
-                className="bg-white dark:bg-surface-dark p-6 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-sm hover:border-primary/40 hover:scale-[1.02] transition-all flex flex-col items-center gap-3 text-center group"
+                className="bg-white dark:bg-surface-dark p-6 rounded-[2.5rem] border border-gray-100 dark:border-white/5 shadow-lg hover:shadow-primary/10 transition-all flex flex-col items-center gap-3 text-center group glass-effect"
               >
-                <div className="size-16 bg-primary/10 text-primary rounded-full flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
-                  <span className="material-symbols-outlined text-3xl">{cat.icon || 'category'}</span>
+                <div className="size-16 bg-primary/10 text-primary rounded-3xl flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-all duration-500 shadow-inner">
+                  <span className="material-symbols-outlined text-3xl group-hover:scale-110 transition-transform">{cat.icon || 'category'}</span>
                 </div>
                 <div className="flex flex-col items-center">
                   <span className="font-bold text-slate-900 dark:text-white leading-tight">{cat.name}</span>
                   {cat.description && (
-                    <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1 line-clamp-2 max-w-[120px] leading-tight font-medium">{cat.description}</p>
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1 line-clamp-2 max-w-[120px] leading-tight font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-300">{cat.description}</p>
                   )}
                 </div>
-              </button>
+              </motion.button>
             ))}
           </div>
         </main>
@@ -1090,131 +1158,8 @@ const SelectServicesScreen: React.FC<{
             <h1 className="text-3xl font-extrabold mb-2 text-slate-900 dark:text-white">Escolha o Serviço</h1>
             <p className="text-gray-600 dark:text-gray-400 text-sm">Selecione um ou mais serviços para o seu agendamento.</p>
           </div>
-          <div className="mb-8 space-y-4">
-            <input
-              type="tel"
-              placeholder="(00) 00000-0000"
-              value={booking.customerPhone}
-              onChange={async (e) => {
-                const raw = e.target.value;
-                const formatted = formatPhoneBr(raw);
-                const digits = formatted.replace(/\D/g, '');
-
-                setBooking(prev => ({ ...prev, customerPhone: formatted }));
-
-                if (digits.length >= 10) {
-                  // Now that DB is clean, simple eq('phone', digits) is enough
-                  const { data: client } = await supabase.from('clients')
-                    .select('*')
-                    .eq('phone', digits)
-                    .single();
-
-                  if (client) {
-                    // Fetch subscriptions separately to avoid 406 errors with nested joins
-                    const { data: subs } = await supabase.from('user_subscriptions')
-                      .select('*, subscription_plans(*)')
-                      .eq('client_id', client.id);
-
-                    const activeSub = subs?.find((s: any) => s.status === 'APPROVED');
-                    let subData;
-                    if (activeSub) {
-                      const plan = activeSub.subscription_plans;
-
-                      // 1. Fetch Plan services with individual limits
-                      const { data: ps } = await supabase.from('plan_services').select('service_id, monthly_limit').eq('plan_id', plan.id);
-                      const serviceLimits: Record<string, number> = {};
-                      ps?.forEach(s => { serviceLimits[String(s.service_id)] = s.monthly_limit; });
-                      const allowedIds = ps?.map(s => String(s.service_id)) || [];
-
-                      // 2. Fetch all appointments this month to calculate usage
-                      const startOfMonth = format(new Date(), 'yyyy-MM-01');
-                      const { data: monthApps } = await supabase
-                        .from('appointments')
-                        .select('id, services:appointment_services(service_id)')
-                        .eq('client_id', client.id)
-                        .gte('appointment_date', startOfMonth)
-                        .in('status', ['COMPLETED', 'PENDING']);
-
-                      // 3. Fetch Service Component mapping to "unpack" combos
-                      const { data: sc } = await supabase.from('service_components').select('*');
-                      const componentsMap: Record<string, string[]> = {};
-                      sc?.forEach(item => {
-                        if (!componentsMap[String(item.parent_service_id)]) componentsMap[String(item.parent_service_id)] = [];
-                        componentsMap[String(item.parent_service_id)].push(String(item.component_service_id));
-                      });
-
-                      // 4. Calculate real usage per service ID
-                      const usage: Record<string, number> = {};
-                      monthApps?.forEach(app => {
-                        const appServices = app.services || [];
-                        appServices.forEach((s: any) => {
-                          const sId = String(s.service_id);
-                          // Increment specific service usage
-                          usage[sId] = (usage[sId] || 0) + 1;
-
-                          if (componentsMap[sId]) {
-                            // It is a combo, increment components too
-                            componentsMap[sId].forEach(compId => {
-                              usage[compId] = (usage[compId] || 0) + 1;
-                            });
-                          }
-                        });
-                      });
-
-                      subData = {
-                        planName: plan?.name || 'Assinatura',
-                        cutsUsed: monthApps?.length || 0, // Keep for legacy if needed
-                        cutsLimit: plan?.monthly_limit || 0, // Keep for legacy
-                        serviceLimits,
-                        serviceUsage: usage,
-                        allowedServices: allowedIds,
-                        isActive: true
-                      };
-                    }
-                    setBooking(prev => ({
-                      ...prev,
-                      customerName: client.name,
-                      birthDate: client.birth_date,
-                      clientSubscription: subData
-                    }));
-                  } else {
-                    setBooking(prev => ({ ...prev, clientSubscription: undefined }));
-                  }
-                } else {
-                  setBooking(prev => ({ ...prev, clientSubscription: undefined }));
-                }
-              }}
-              className="w-full rounded-lg bg-white dark:bg-surface-dark border border-gray-200 dark:border-white/10 px-4 py-3 text-sm text-slate-900 dark:text-white focus:ring-primary focus:border-primary placeholder:text-gray-400"
-            />
-            {booking.clientSubscription?.isActive && (
-              <div className="bg-primary-dark/10 border border-primary-dark/20 p-3 rounded-xl flex items-center justify-between animate-fade-in transition-colors">
-                <div className="flex items-center gap-2 text-primary-dark dark:text-primary-dark/80">
-                  <span className="material-symbols-outlined filled">crown</span>
-                  <span className="text-sm font-bold">{booking.clientSubscription.planName}</span>
-                </div>
-                <span className="text-xs font-bold text-primary-dark dark:text-primary-dark/70 uppercase tracking-wider">
-                  Plano Ativo
-                </span>
-              </div>
-            )}
-            <input
-              type="text"
-              placeholder="Seu nome completo"
-              value={booking.customerName}
-              onChange={(e) => setBooking({ ...booking, customerName: e.target.value })}
-              className="w-full rounded-lg bg-white dark:bg-surface-dark border border-gray-200 dark:border-white/10 px-4 py-3 text-sm text-slate-900 dark:text-white focus:ring-primary focus:border-primary placeholder:text-gray-400"
-            />
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Data de Nascimento (Opcional)</label>
-              <input
-                type="date"
-                value={booking.birthDate || ''}
-                onChange={(e) => setBooking({ ...booking, birthDate: e.target.value })}
-                className="w-full rounded-lg bg-white dark:bg-surface-dark border border-gray-200 dark:border-white/10 px-4 py-3 text-sm text-slate-900 dark:text-white focus:ring-primary focus:border-primary"
-              />
-              <p className="text-[9px] text-gray-400 px-1 italic">Cadastre para ganhar mimos no seu aniversário!</p>
-            </div>
-          </div>
+          {/* Categories/Services selection list rendered below */}
+          <div className="space-y-4">         </div>
           <div className="space-y-4">
             {(() => {
               const filtered = services.filter(s => String(s.category_id) === String(booking.selectedCategory?.id));
@@ -1226,19 +1171,28 @@ const SelectServicesScreen: React.FC<{
                 return 0;
               });
               return prioritized.map(service => (
-                <label key={service.id} className={`relative flex gap-4 p-4 rounded-xl bg-white dark:bg-surface-dark border transition-all cursor-pointer ${booking.selectedServices.some(s => s.id === service.id) ? 'border-primary' : 'border-gray-200 dark:border-transparent'} shadow-sm hover:shadow-md`}>
-                  <div className="size-20 rounded-lg overflow-hidden bg-gray-200 dark:bg-gray-800 shrink-0">
-                    <img
-                      src={service.imageUrl}
-                      onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.classList.add('flex', 'items-center', 'justify-center'); e.currentTarget.parentElement!.innerHTML = '<span class="material-symbols-outlined text-gray-400">image_not_supported</span>'; }}
-                      className="w-full h-full object-cover"
-                      alt={service.name}
-                    />
+                <motion.label
+                  whileHover={{ scale: 1.02, x: 4 }}
+                  whileTap={{ scale: 0.98 }}
+                  key={service.id}
+                  className={`relative flex gap-4 p-4 rounded-2xl bg-white dark:bg-surface-dark border transition-all cursor-pointer ${booking.selectedServices.some(s => s.id === service.id) ? 'border-primary shadow-lg shadow-primary/10' : 'border-gray-100 dark:border-white/5'} shadow-sm hover:shadow-md glass-effect`}
+                >
+                  <div className="size-20 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 shrink-0 flex items-center justify-center shadow-inner">
+                    {service.imageUrl ? (
+                      <img
+                        src={service.imageUrl}
+                        onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.classList.add('flex', 'items-center', 'justify-center'); e.currentTarget.parentElement!.innerHTML = '<span class="material-symbols-outlined text-gray-400">image_not_supported</span>'; }}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                        alt={service.name}
+                      />
+                    ) : (
+                      <span className="material-symbols-outlined text-gray-400 text-3xl">image</span>
+                    )}
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-base font-bold text-slate-900 dark:text-white">{service.name}</h3>
-                    <p className="text-gray-500 dark:text-gray-400 text-xs line-clamp-2 mt-1">{service.description}</p>
-                    <div className="flex justify-between mt-2">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white leading-tight">{service.name}</h3>
+                    <p className="text-gray-500 dark:text-gray-400 text-[11px] line-clamp-2 mt-1 leading-relaxed">{service.description}</p>
+                    <div className="flex justify-between items-center mt-2">
                       <span className="text-primary font-bold text-sm">
                         {(() => {
                           const isSub = booking.clientSubscription?.isActive;
@@ -1246,24 +1200,19 @@ const SelectServicesScreen: React.FC<{
 
                           if (isSub && isAllowed) {
                             return (
-                              <span className="text-amber-600 dark:text-amber-500 flex items-center gap-1">
+                              <span className="text-amber-600 dark:text-amber-500 flex items-center gap-1 font-black tracking-wide">
                                 <span className="material-symbols-outlined text-sm filled">check_circle</span>
                                 {(() => {
                                   const isSelected = booking.selectedServices.some(s => s.id === service.id);
-
-                                  // Check if it's a combo or individual
-                                  // For simplicity in the UI counter, we show the status of the service itself IF it has a direct limit
-                                  // OR if it's a combo, we could show something more complex, but let's stick to the "basic" service limit for now.
                                   const limit = booking.clientSubscription!.serviceLimits[service.id] || 0;
                                   const currentUsed = booking.clientSubscription!.serviceUsage[service.id] || 0;
 
                                   if (limit > 0) {
                                     let available = limit - currentUsed;
                                     if (isSelected) {
-                                      const selectedCountBefore = booking.selectedServices
-                                        .slice(0, booking.selectedServices.findIndex(s => s.id === service.id))
-                                        .filter(s => s.id === service.id).length;
-                                      available = Math.max(0, available - (selectedCountBefore + 1));
+                                      const idx = booking.selectedServices.findIndex(s => s.id === service.id);
+                                      const countBefore = booking.selectedServices.slice(0, idx).filter(s => s.id === service.id).length;
+                                      available = Math.max(0, available - (countBefore + 1));
                                     }
                                     return `${available}/${limit}`;
                                   }
@@ -1275,7 +1224,9 @@ const SelectServicesScreen: React.FC<{
                           return `R$ ${service.price.toFixed(2)}`;
                         })()}
                       </span>
-                      <span className="text-gray-500 text-xs flex items-center gap-1"><span className="material-symbols-outlined text-sm">schedule</span> {service.duration} min</span>
+                      <span className="text-gray-400 dark:text-gray-500 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1">
+                        <span className="material-symbols-outlined text-sm">schedule</span> {service.duration} min
+                      </span>
                     </div>
                   </div>
                   <input
@@ -1284,7 +1235,12 @@ const SelectServicesScreen: React.FC<{
                     onChange={() => toggleService(service)}
                     className="hidden"
                   />
-                </label>
+                  {booking.selectedServices.some(s => s.id === service.id) && (
+                    <div className="absolute top-2 right-2 text-primary">
+                      <span className="material-symbols-outlined filled text-xl">check_circle</span>
+                    </div>
+                  )}
+                </motion.label>
               ));
             })()}
           </div>
@@ -1314,13 +1270,15 @@ const SelectServicesScreen: React.FC<{
                 })()}
               </span>
             </div>
-            <button
-              disabled={booking.selectedServices.length === 0 || !booking.customerName}
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              disabled={booking.selectedServices.length === 0}
               onClick={onNext}
-              className="flex-1 bg-primary text-white font-bold py-3.5 px-6 rounded-lg shadow-lg disabled:opacity-50"
+              className="flex-1 bg-primary text-white font-black py-4 px-6 rounded-2xl shadow-xl shadow-primary/20 disabled:opacity-50 premium-glow uppercase tracking-widest text-xs"
             >
               Continuar
-            </button>
+            </motion.button>
           </div>
         </footer>
       </div>
@@ -1341,6 +1299,7 @@ const SelectDateTimeScreen: React.FC<{
   const [existingAppointments, setExistingAppointments] = useState<any[]>([]);
   const [workHours, setWorkHours] = useState<any[]>([]);
   const [minAdvance, setMinAdvance] = useState(0);
+  const [appointmentInterval, setAppointmentInterval] = useState(15);
 
   useEffect(() => {
     const initData = async () => {
@@ -1385,9 +1344,19 @@ const SelectDateTimeScreen: React.FC<{
       }
 
       // Fetch Settings: min_advance_minutes
-      const { data: settingsData } = await supabase.from('settings').select('*').eq('key', 'min_advance_minutes').single();
+      const { data: settingsData } = await supabase.from('settings').select('*').eq('key', 'min_advance_minutes').maybeSingle();
       if (settingsData) {
         setMinAdvance(parseInt(settingsData.value) || 0); // Default 0
+      }
+
+      // Fetch Settings: interval_minutes
+      const { data: intervalData } = await supabase.from('settings').select('*').eq('key', 'interval_minutes').maybeSingle();
+      if (intervalData) {
+        console.log('Fetched interval:', intervalData.value);
+        setAppointmentInterval(parseInt(intervalData.value) || 30);
+      } else {
+        console.log('No interval_minutes found in settings, using default 30');
+        setAppointmentInterval(30); // Default to 30 if missing
       }
     };
     initData();
@@ -1406,7 +1375,7 @@ const SelectDateTimeScreen: React.FC<{
     }
 
     const times: string[] = [];
-    const step = 15;
+    const step = appointmentInterval;
     const myDuration = booking.selectedServices.reduce((sum, s) => sum + s.duration, 0) || 30;
 
     const generateSlots = (start: string, end: string) => {
@@ -1487,7 +1456,7 @@ const SelectDateTimeScreen: React.FC<{
 
     setAvailableTimes(times);
 
-  }, [selectedDateIndex, blockedSlots, workHours, existingAppointments, booking.selectedServices, minAdvance]);
+  }, [selectedDateIndex, blockedSlots, workHours, existingAppointments, booking.selectedServices, minAdvance, appointmentInterval]);
 
   const handleTimeSelect = (time: string) => {
     setBooking({ ...booking, selectedDate: nextDays[selectedDateIndex].dateStr, selectedTime: time });
@@ -1550,6 +1519,166 @@ const SelectDateTimeScreen: React.FC<{
           </div>
         </footer>
       </div>
+    </div>
+  );
+};
+
+const CustomerInfoScreen: React.FC<{
+  booking: BookingState;
+  setBooking: React.Dispatch<React.SetStateAction<BookingState>>;
+  onNext: () => void;
+  onBack: () => void;
+}> = ({ booking, setBooking, onNext, onBack }) => {
+  const formatPhoneBr = (v: string) => {
+    const numbers = v.replace(/\D/g, '').slice(0, 11);
+    if (!numbers) return '';
+    if (numbers.length <= 2) return `(${numbers}`;
+    if (numbers.length <= 3) return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
+    if (numbers.length <= 7) return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}${numbers.length > 2 ? '-' : ''}${numbers.slice(7)}`;
+    if (numbers.length <= 11) return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7)}`;
+    return numbers;
+  };
+
+  const handlePhoneChange = async (val: string) => {
+    const formatted = formatPhoneBr(val);
+    const digits = formatted.replace(/\D/g, '');
+    setBooking(prev => ({ ...prev, customerPhone: formatted }));
+
+    if (digits.length >= 10) {
+      const { data: client } = await supabase.from('clients')
+        .select('*')
+        .eq('phone', digits)
+        .single();
+
+      if (client) {
+        const { data: subs } = await supabase.from('user_subscriptions')
+          .select('*, subscription_plans(*)')
+          .eq('client_id', client.id);
+
+        const activeSub = subs?.find((s: any) => s.status === 'APPROVED');
+        let subData;
+        if (activeSub) {
+          const plan = activeSub.subscription_plans;
+          const { data: ps } = await supabase.from('plan_services').select('service_id, monthly_limit').eq('plan_id', plan.id);
+          const serviceLimits: Record<string, number> = {};
+          ps?.forEach(s => { serviceLimits[String(s.service_id)] = s.monthly_limit; });
+          const allowedIds = ps?.map(s => String(s.service_id)) || [];
+
+          const startOfMonth = format(new Date(), 'yyyy-MM-01');
+          const { data: monthApps } = await supabase
+            .from('appointments')
+            .select('id, services:appointment_services(service_id)')
+            .eq('client_id', client.id)
+            .gte('appointment_date', startOfMonth)
+            .in('status', ['COMPLETED', 'PENDING']);
+
+          const { data: sc } = await supabase.from('service_components').select('*');
+          const componentsMap: Record<string, string[]> = {};
+          sc?.forEach(item => {
+            if (!componentsMap[String(item.parent_service_id)]) componentsMap[String(item.parent_service_id)] = [];
+            componentsMap[String(item.parent_service_id)].push(String(item.component_service_id));
+          });
+
+          const usage: Record<string, number> = {};
+          monthApps?.forEach(app => {
+            const appServices = app.services || [];
+            appServices.forEach((s: any) => {
+              const sId = String(s.service_id);
+              usage[sId] = (usage[sId] || 0) + 1;
+              if (componentsMap[sId]) {
+                componentsMap[sId].forEach(compId => {
+                  usage[compId] = (usage[compId] || 0) + 1;
+                });
+              }
+            });
+          });
+
+          subData = {
+            planName: plan?.name || 'Assinatura',
+            cutsUsed: monthApps?.length || 0,
+            cutsLimit: plan?.monthly_limit || 0,
+            serviceLimits,
+            serviceUsage: usage,
+            allowedServices: allowedIds,
+            isActive: true
+          };
+        }
+        setBooking(prev => ({
+          ...prev,
+          customerName: client.name,
+          birthDate: client.birth_date,
+          clientSubscription: subData
+        }));
+      } else {
+        setBooking(prev => ({ ...prev, clientSubscription: undefined }));
+      }
+    } else {
+      setBooking(prev => ({ ...prev, clientSubscription: undefined }));
+    }
+  };
+
+  return (
+    <div className="bg-gradient-to-b from-primary/10 to-white dark:bg-background-dark min-h-screen flex flex-col transition-colors">
+      <header className="p-4 flex items-center max-w-md mx-auto w-full">
+        <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 transition-colors">
+          <span className="material-symbols-outlined font-bold">arrow_back</span>
+        </button>
+        <h2 className="ml-2 font-bold text-slate-800 dark:text-white text-lg">Suas Informações</h2>
+      </header>
+      <main className="flex-1 p-6 max-w-md mx-auto w-full space-y-6">
+        <div className="bg-white dark:bg-surface-dark border border-gray-100 dark:border-white/5 rounded-3xl p-6 shadow-sm space-y-5 transition-colors">
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-gray-400 uppercase px-1">Número de Telefone</label>
+            <input
+              type="text"
+              placeholder="(00) 0 0000-0000"
+              value={booking.customerPhone}
+              onChange={(e) => handlePhoneChange(e.target.value)}
+              className="w-full rounded-xl bg-gray-50 dark:bg-black/20 border-transparent px-4 py-3 text-sm text-slate-900 dark:text-white focus:ring-primary focus:bg-white dark:focus:bg-surface-dark transition-all placeholder:text-gray-400"
+            />
+          </div>
+
+          {booking.clientSubscription?.isActive && (
+            <div className="bg-primary/10 border border-primary/20 p-3 rounded-xl flex items-center justify-between animate-fade-in shadow-sm">
+              <div className="flex items-center gap-2 text-primary-dark dark:text-primary">
+                <span className="material-symbols-outlined filled text-sm">crown</span>
+                <span className="text-sm font-bold">{booking.clientSubscription.planName}</span>
+              </div>
+              <span className="text-[10px] font-black text-primary-dark dark:text-primary uppercase tracking-wider">Membro VIP</span>
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-gray-400 uppercase px-1">Nome Completo</label>
+            <input
+              type="text"
+              placeholder="Como quer ser chamado?"
+              value={booking.customerName}
+              onChange={(e) => setBooking({ ...booking, customerName: e.target.value })}
+              className="w-full rounded-xl bg-gray-50 dark:bg-black/20 border-transparent px-4 py-3 text-sm text-slate-900 dark:text-white focus:ring-primary focus:bg-white dark:focus:bg-surface-dark transition-all placeholder:text-gray-400"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-gray-400 uppercase px-1">AnIVERSÁRIO (OPCIONAL)</label>
+            <input
+              type="date"
+              value={booking.birthDate || ''}
+              onChange={(e) => setBooking({ ...booking, birthDate: e.target.value })}
+              className="w-full rounded-xl bg-gray-50 dark:bg-black/20 border-transparent px-4 py-3 text-sm text-slate-900 dark:text-white focus:ring-primary focus:bg-white dark:focus:bg-surface-dark transition-all"
+            />
+            <p className="text-[9px] text-gray-400 px-2 italic mt-1.5 flex items-center gap-1"><span className="material-symbols-outlined text-[10px]">info</span> Cadastre para ganhar mimos especiais no seu mês!</p>
+          </div>
+        </div>
+
+        <button
+          disabled={!booking.customerName || !booking.customerPhone || booking.customerPhone.length < 14}
+          onClick={onNext}
+          className="w-full py-4 bg-primary text-white font-bold rounded-2xl shadow-xl shadow-primary/20 hover:bg-primary-dark transition-all active:scale-[0.98] disabled:opacity-50 disabled:grayscale"
+        >
+          Revisar Agendamento
+        </button>
+      </main>
     </div>
   );
 };
@@ -1961,78 +2090,7 @@ const AdminFinanceScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   );
 };
 
-const AdminBlockScheduleScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
-  const [date, setDate] = useState('');
-  const [time, setTime] = useState('');
-  const [reason, setReason] = useState('');
-  const [blockedSlots, setBlockedSlots] = useState<any[]>([]);
 
-  const fetchBlocks = async () => {
-    const { data } = await supabase.from('blocked_slots').select('*');
-    if (data) setBlockedSlots(data);
-  };
-
-  useEffect(() => { fetchBlocks(); }, []);
-
-  const handleBlock = async () => {
-    if (!date || !time) return alert('Selecione data e hora');
-    const { error } = await supabase.from('blocked_slots').insert({
-      date,
-      time,
-      reason: reason || 'Bloqueado pelo Admin'
-    });
-
-    if (error) {
-      alert('Erro ao bloquear: ' + error.message);
-    } else {
-      setDate(''); setTime(''); setReason('');
-      fetchBlocks();
-      alert('Horário bloqueado!');
-    }
-  };
-
-  const handleDelete = (id: string) => {
-    if (!window.confirm('Liberar este horário?')) return;
-    supabase.from('blocked_slots').delete().eq('id', id)
-      .then(() => fetchBlocks());
-  };
-
-  return (
-    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col transition-colors">
-      <header className="sticky top-0 z-50 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md transition-colors">
-        <div className="max-w-md mx-auto w-full flex items-center justify-between p-4">
-          <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400 font-bold transition-colors">
-            <span className="material-symbols-outlined">arrow_back</span>
-          </button>
-          <h2 className="font-bold text-slate-900 dark:text-white">Bloquear Agenda</h2>
-          <div className="size-10"></div>
-        </div>
-      </header>
-      <main className="p-4 space-y-6 max-w-md mx-auto w-full">
-        <div className="bg-white dark:bg-surface-dark p-4 rounded-xl space-y-3 border border-gray-200 dark:border-white/10 transition-colors">
-          <h3 className="font-bold text-slate-900 dark:text-white">Novo Bloqueio</h3>
-          <input type="date" className="w-full bg-gray-50 dark:bg-background-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white" value={date} onChange={e => setDate(e.target.value)} />
-          <input type="time" className="w-full bg-gray-50 dark:bg-background-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white" value={time} onChange={e => setTime(e.target.value)} />
-          <input type="text" className="w-full bg-gray-50 dark:bg-background-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white" placeholder="Motivo (opcional)" value={reason} onChange={e => setReason(e.target.value)} />
-          <button onClick={handleBlock} className="w-full bg-red-500/10 dark:bg-red-500/20 text-red-600 dark:text-red-400 py-3 rounded-lg font-bold border border-red-500/20 hover:bg-red-500/20 dark:hover:bg-red-500/30 transition-colors">Bloquear Horário</button>
-        </div>
-
-        <div className="space-y-2">
-          <h3 className="font-bold text-gray-500 dark:text-gray-400 text-sm uppercase tracking-wider">Bloqueios Ativos</h3>
-          {blockedSlots.map(b => (
-            <div key={b.id} className="bg-white dark:bg-surface-dark p-3 rounded-lg border border-gray-200 dark:border-white/5 flex justify-between items-center transition-colors">
-              <div>
-                <p className="font-bold text-slate-900 dark:text-white">{new Date(b.date + 'T00:00:00').toLocaleDateString('pt-BR')} às {b.time}</p>
-                <p className="text-xs text-gray-500">{b.reason}</p>
-              </div>
-              <button onClick={() => handleDelete(b.id)} className="text-gray-400 hover:text-red-500 dark:hover:text-white transition-colors"><span className="material-symbols-outlined">delete</span></button>
-            </div>
-          ))}
-        </div>
-      </main>
-    </div>
-  );
-};
 
 const ReviewScreen: React.FC<{
   booking: BookingState;
@@ -2524,42 +2582,45 @@ const ChatScreen: React.FC<{
   );
 };
 
-
-
-const AdminWeeklyScheduleScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+const AdminSettingsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [schedule, setSchedule] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingDay, setEditingDay] = useState<any | null>(null);
-  const [interval, setInterval] = useState('15');
+  const [interval, setIntervalValue] = useState('30');
   const [minAdvance, setMinAdvance] = useState('0');
 
-  const fetchSchedule = async () => {
-    // Fetch Work Hours
-    const { data: wh } = await supabase
-      .from('work_hours')
-      .select('*')
-      .order('day_of_week');
+  // Bloqueio de Horas
+  const [blockDate, setBlockDate] = useState('');
+  const [blockTime, setBlockTime] = useState('');
+  const [blockReason, setBlockReason] = useState('');
+  const [blockedSlots, setBlockedSlots] = useState<any[]>([]);
+  const [loadingBlocks, setLoadingBlocks] = useState(false);
 
+  const fetchSchedule = async () => {
+    setLoading(true);
+    const { data: wh } = await supabase.from('work_hours').select('*').order('day_of_week');
     if (wh) setSchedule(wh);
 
-    // Fetch Interval
-    const { data: settingsData } = await supabase.from('settings').select('*').eq('key', 'interval_minutes').single();
-    if (settingsData) setInterval(settingsData.value);
-
-    // Fetch Min Advance
-    const { data: advData } = await supabase.from('settings').select('*').eq('key', 'min_advance_minutes').single();
-    if (advData) setMinAdvance(advData.value);
-
+    const { data: settingsData } = await supabase.from('settings').select('*');
+    if (settingsData) {
+      const s: any = {};
+      settingsData.forEach((r: any) => s[r.key] = r.value);
+      setIntervalValue(s.interval_minutes || '30');
+      setMinAdvance(s.min_advance_minutes || '0');
+    }
     setLoading(false);
   };
 
-  useEffect(() => { fetchSchedule(); }, []);
+  const fetchBlocks = async () => {
+    const { data } = await supabase.from('blocked_slots').select('*').order('date', { ascending: true }).order('time', { ascending: true });
+    if (data) setBlockedSlots(data);
+  };
+
+  useEffect(() => { fetchSchedule(); fetchBlocks(); }, []);
 
   const handleToggleDay = async (day: any) => {
     const newVal = !day.is_open;
-    // Optimistic
     setSchedule(prev => prev.map(d => d.id === day.id ? { ...d, is_open: newVal } : d));
-
     await supabase.from('work_hours').update({ is_open: newVal }).eq('id', day.id);
   };
 
@@ -2576,19 +2637,73 @@ const AdminWeeklyScheduleScreen: React.FC<{ onBack: () => void }> = ({ onBack })
 
     if (error) alert('Erro ao salvar: ' + error.message);
     else {
+      setSchedule(prev => prev.map(d => d.id === editingDay.id ? editingDay : d));
       setEditingDay(null);
-      fetchSchedule();
     }
   };
 
-  const handleSaveInterval = async (newInterval: string) => {
-    setInterval(newInterval);
-    await supabase.from('settings').upsert({ key: 'interval_minutes', value: newInterval });
+  const handleSaveInterval = async (val: string) => {
+    setIntervalValue(val);
+    await supabase.from('settings').upsert({ key: 'interval_minutes', value: val });
   };
 
-  const handleSaveMinAdvance = async (newVal: string) => {
-    setMinAdvance(newVal);
-    await supabase.from('settings').upsert({ key: 'min_advance_minutes', value: newVal });
+  const handleSaveMinAdvance = async (val: string) => {
+    setMinAdvance(val);
+    await supabase.from('settings').upsert({ key: 'min_advance_minutes', value: val });
+  };
+
+  const handleBlock = async () => {
+    if (!blockDate || !blockTime) return alert('Selecione data e hora');
+    setLoadingBlocks(true);
+    const { error } = await supabase.from('blocked_slots').insert({
+      date: blockDate,
+      time: blockTime,
+      reason: blockReason || 'Bloqueado pelo Admin'
+    });
+
+    if (error) {
+      alert('Erro ao bloquear: ' + error.message);
+    } else {
+      setBlockDate(''); setBlockTime(''); setBlockReason('');
+      fetchBlocks();
+      alert('Horário bloqueado!');
+    }
+    setLoadingBlocks(false);
+  };
+
+  const handleDeleteBlock = (id: string) => {
+    if (!window.confirm('Liberar este horário?')) return;
+    supabase.from('blocked_slots').delete().eq('id', id)
+      .then(() => fetchBlocks());
+  };
+
+  const handleQuickBlock = async (type: 'LUNCH' | 'AFTERNOON' | 'MORNING') => {
+    if (!blockDate) return alert('Selecione uma data primeiro');
+    setLoadingBlocks(true);
+    
+    const blocks = [];
+    if (type === 'LUNCH') {
+      blocks.push({ date: blockDate, time: '12:00', reason: 'Intervalo de Almoço' });
+      blocks.push({ date: blockDate, time: '12:30', reason: 'Intervalo de Almoço' });
+    } else if (type === 'AFTERNOON') {
+      for (let h = 14; h < 18; h++) {
+        blocks.push({ date: blockDate, time: `${String(h).padStart(2, '0')}:00`, reason: 'Indisponível (Tarde)' });
+        blocks.push({ date: blockDate, time: `${String(h).padStart(2, '0')}:30`, reason: 'Indisponível (Tarde)' });
+      }
+    } else if (type === 'MORNING') {
+      for (let h = 8; h < 12; h++) {
+        blocks.push({ date: blockDate, time: `${String(h).padStart(2, '0')}:00`, reason: 'Indisponível (Manhã)' });
+        blocks.push({ date: blockDate, time: `${String(h).padStart(2, '0')}:30`, reason: 'Indisponível (Manhã)' });
+      }
+    }
+
+    const { error } = await supabase.from('blocked_slots').insert(blocks);
+    if (error) alert('Erro ao aplicar bloqueio rápido: ' + error.message);
+    else {
+      fetchBlocks();
+      alert('Bloqueios aplicados com sucesso!');
+    }
+    setLoadingBlocks(false);
   };
 
   const dayNames = ['Domingo', 'Segunda-Feira', 'Terça-Feira', 'Quarta-Feira', 'Quinta-Feira', 'Sexta-Feira', 'Sábado'];
@@ -2600,13 +2715,12 @@ const AdminWeeklyScheduleScreen: React.FC<{ onBack: () => void }> = ({ onBack })
           <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400 font-bold transition-colors">
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
-          <h2 className="font-bold text-slate-900 dark:text-white">Horários de Atendimento</h2>
+          <h2 className="font-bold text-slate-900 dark:text-white">Horário de Atendimento</h2>
           <div className="size-10"></div>
         </div>
       </header>
 
-      <main className="p-4 space-y-4 max-w-md mx-auto w-full pb-24">
-        {/* Interval Setting */}
+      <main className="p-4 space-y-6 max-w-md mx-auto w-full pb-24">
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-white dark:bg-surface-dark p-4 rounded-3xl border border-gray-200 dark:border-white/5 shadow-sm">
             <label className="text-gray-500 dark:text-gray-400 text-[10px] font-bold uppercase tracking-widest block mb-1">Intervalo</label>
@@ -2638,102 +2752,170 @@ const AdminWeeklyScheduleScreen: React.FC<{ onBack: () => void }> = ({ onBack })
           </div>
         </div>
 
-        <h3 className="text-[11px] text-gray-500 font-bold uppercase pt-2 px-1">Semana</h3>
+        <h3 className="text-[11px] text-gray-500 font-bold uppercase pt-2 px-1">Escala Semanal</h3>
 
-        {loading ? <div className="text-center p-10">Carregando...</div> : schedule.map(day => (
-          <div key={day.id} className={`bg-gray-100 dark:bg-surface-dark rounded-3xl p-5 border ${day.is_open ? 'border-transparent' : 'border-gray-300 opacity-75'} transition-all`}>
+        {loading ? (
+          <div className="text-center p-10 text-gray-400">Carregando...</div>
+        ) : schedule.map(day => (
+          <div key={day.id} className={`bg-white dark:bg-surface-dark rounded-3xl p-5 border ${day.is_open ? 'border-primary/20 shadow-sm' : 'border-gray-200 opacity-75'}`}>
             <div className="flex justify-between items-center mb-4">
               <span className="font-bold text-slate-800 dark:text-white capitalize">{dayNames[day.day_of_week]}</span>
               <div className="flex items-center gap-3">
-                <span className="text-[10px] font-bold uppercase text-gray-400">{day.is_open ? '' : 'Não Atendendo'}</span>
+                <span className="text-[10px] font-bold uppercase text-gray-400">{day.is_open ? '' : 'Fechado'}</span>
                 <button
                   onClick={() => handleToggleDay(day)}
-                  className={`w-12 h-6 rounded-full p-0.5 transition-colors ${day.is_open ? 'bg-green-500' : 'bg-gray-400'}`}
+                  className={`w-12 h-6 rounded-full p-0.5 transition-colors ${day.is_open ? 'bg-green-500' : 'bg-gray-300 dark:bg-white/10'}`}
                 >
                   <div className={`h-5 w-5 bg-white rounded-full shadow-sm transition-transform ${day.is_open ? 'translate-x-6' : 'translate-x-0'}`}></div>
                 </button>
               </div>
             </div>
 
-            <div className="flex items-center justify-between bg-white dark:bg-black/20 p-4 rounded-2xl">
+            <div className="flex items-center justify-between bg-gray-50 dark:bg-black/20 p-4 rounded-2xl border border-gray-100 dark:border-white/5">
               {day.is_open ? (
                 <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm font-bold text-slate-700 dark:text-gray-300">
-                  <span>{day.start_time_1?.slice(0, 5)}</span>
-                  <span>{day.end_time_1?.slice(0, 5)}</span>
+                  <span>Manhã: {day.start_time_1?.slice(0, 5)} - {day.end_time_1?.slice(0, 5)}</span>
                   {day.start_time_2 && day.end_time_2 && (
-                    <>
-                      <span>{day.start_time_2?.slice(0, 5)}</span>
-                      <span>{day.end_time_2?.slice(0, 5)}</span>
-                    </>
+                    <span className="col-span-2">Tarde: {day.start_time_2?.slice(0, 5)} - {day.end_time_2?.slice(0, 5)}</span>
                   )}
                 </div>
               ) : (
-                <span className="text-sm font-bold text-gray-400">Fechado</span>
+                <span className="text-sm font-bold text-gray-400">Fora de Serviço</span>
               )}
 
-              <button onClick={() => setEditingDay(day)} className="size-8 flex items-center justify-center text-gray-400 hover:text-primary">
-                <span className="material-symbols-outlined">edit</span>
+              <button onClick={() => setEditingDay(day)} className="size-10 rounded-xl bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 flex items-center justify-center text-gray-400 hover:text-primary transition-all active:scale-95 shadow-sm">
+                <span className="material-symbols-outlined text-sm">edit</span>
               </button>
             </div>
           </div>
         ))}
-      </main>
 
-      {/* Edit Modal */}
-      {editingDay && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm px-6">
-          <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-scale-up">
-            <h3 className="font-bold text-xl mb-6 text-slate-900 dark:text-white text-center">Editar {dayNames[editingDay.day_of_week]}</h3>
+        <hr className="border-gray-200 dark:border-white/10 h-px w-full" />
 
-            <div className="bg-gray-50 dark:bg-black/20 p-4 rounded-2xl border border-gray-100 dark:border-white/5 space-y-4">
-              {/* Morning Shift */}
+        <div className="bg-white dark:bg-surface-dark p-6 rounded-3xl border border-gray-200 dark:border-white/10 space-y-4 transition-all shadow-sm">
+          <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <span className="material-symbols-outlined text-red-500 filled">block</span>
+            Bloqueio de Horas
+          </h3>
+          <p className="text-xs text-gray-500">Bloqueie datas e horários específicos para pausas ou imprevistos.</p>
+          
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
               <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2">
-                    <span className="material-symbols-outlined text-sm">wb_sunny</span>
-                    Manhã
-                  </label>
-                  <button
-                    onClick={() => setEditingDay({ ...editingDay, is_morning_open: !editingDay.is_morning_open })}
-                    className={`w-10 h-5 rounded-full p-0.5 transition-colors ${editingDay.is_morning_open ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}
-                  >
-                    <div className={`h-4 w-4 bg-white rounded-full shadow-sm transition-transform ${editingDay.is_morning_open ? 'translate-x-5' : 'translate-x-0'}`}></div>
-                  </button>
-                </div>
-
-                <div className={`grid grid-cols-2 gap-2 text-center transition-all duration-300 ${!editingDay.is_morning_open && 'opacity-40 grayscale pointer-events-none'}`}>
-                  <input type="time" className="bg-white dark:bg-background-dark p-3 rounded-xl font-bold text-center border border-gray-200 dark:border-white/10" value={editingDay.start_time_1} onChange={e => setEditingDay({ ...editingDay, start_time_1: e.target.value })} />
-                  <input type="time" className="bg-white dark:bg-background-dark p-3 rounded-xl font-bold text-center border border-gray-200 dark:border-white/10" value={editingDay.end_time_1} onChange={e => setEditingDay({ ...editingDay, end_time_1: e.target.value })} />
-                </div>
+                <label className="text-[10px] font-black uppercase text-gray-400 px-1 mb-1 block">Data</label>
+                <input type="date" className="w-full bg-gray-50 dark:bg-background-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white font-bold" value={blockDate} onChange={e => setBlockDate(e.target.value)} />
               </div>
-
-              <div className="h-px bg-gray-200 dark:bg-white/10"></div>
-
-              {/* Afternoon Shift */}
               <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2">
-                    <span className="material-symbols-outlined text-sm">wb_twilight</span>
-                    Tarde
-                  </label>
-                  <button
-                    onClick={() => setEditingDay({ ...editingDay, is_afternoon_open: !editingDay.is_afternoon_open })}
-                    className={`w-10 h-5 rounded-full p-0.5 transition-colors ${editingDay.is_afternoon_open ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}
-                  >
-                    <div className={`h-4 w-4 bg-white rounded-full shadow-sm transition-transform ${editingDay.is_afternoon_open ? 'translate-x-5' : 'translate-x-0'}`}></div>
-                  </button>
-                </div>
-
-                <div className={`grid grid-cols-2 gap-2 text-center transition-all duration-300 ${!editingDay.is_afternoon_open && 'opacity-40 grayscale pointer-events-none'}`}>
-                  <input type="time" className="bg-white dark:bg-background-dark p-3 rounded-xl font-bold text-center border border-gray-200 dark:border-white/10" value={editingDay.start_time_2 || ''} onChange={e => setEditingDay({ ...editingDay, start_time_2: e.target.value })} />
-                  <input type="time" className="bg-white dark:bg-background-dark p-3 rounded-xl font-bold text-center border border-gray-200 dark:border-white/10" value={editingDay.end_time_2 || ''} onChange={e => setEditingDay({ ...editingDay, end_time_2: e.target.value })} />
-                </div>
+                <label className="text-[10px] font-black uppercase text-gray-400 px-1 mb-1 block">Horário</label>
+                <input type="time" className="w-full bg-gray-50 dark:bg-background-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white font-bold" value={blockTime} onChange={e => setBlockTime(e.target.value)} />
               </div>
             </div>
+            <div>
+              <label className="text-[10px] font-black uppercase text-gray-400 px-1 mb-1 block">Motivo</label>
+              <input type="text" className="w-full bg-gray-50 dark:bg-background-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white font-bold" placeholder="Ex: Médico, Reunião..." value={blockReason} onChange={e => setBlockReason(e.target.value)} />
+            </div>
+            <button onClick={handleBlock} disabled={loadingBlocks} className="w-full bg-red-500 text-white py-4 rounded-2xl font-bold shadow-lg shadow-red-500/20 active:scale-95 transition-all flex items-center justify-center gap-2">
+              {loadingBlocks ? 'Bloqueando...' : (
+                <>
+                  <span className="material-symbols-outlined text-sm">add_circle</span>
+                  Adicionar Bloqueio
+                </>
+              )}
+            </button>
 
-            <div className="flex gap-3 pt-6">
-              <button onClick={() => setEditingDay(null)} className="flex-1 py-3.5 text-gray-500 font-bold hover:bg-gray-50 rounded-xl transition-colors">Cancelar</button>
-              <button onClick={handleSaveDay} className="flex-1 py-3.5 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/20">Salvar</button>
+            <div className="pt-2">
+              <label className="text-[10px] font-black uppercase text-gray-400 px-1 mb-2 block">Bloqueios Rápidos ({blockDate || 'Selecione data'})</label>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => handleQuickBlock('LUNCH')}
+                  disabled={!blockDate || loadingBlocks}
+                  className="flex-1 py-3 px-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-500 border border-amber-500/20 text-[10px] font-black uppercase tracking-tight hover:bg-amber-500/20 transition-all disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-sm block mb-1">restaurant</span>
+                  Almoço
+                </button>
+                <button 
+                  onClick={() => handleQuickBlock('MORNING')}
+                  disabled={!blockDate || loadingBlocks}
+                  className="flex-1 py-3 px-2 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-500 border border-blue-500/20 text-[10px] font-black uppercase tracking-tight hover:bg-blue-500/20 transition-all disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-sm block mb-1">wb_sunny</span>
+                  Manhã
+                </button>
+                <button 
+                  onClick={() => handleQuickBlock('AFTERNOON')}
+                  disabled={!blockDate || loadingBlocks}
+                  className="flex-1 py-3 px-2 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-500 border border-indigo-500/20 text-[10px] font-black uppercase tracking-tight hover:bg-indigo-500/20 transition-all disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-sm block mb-1">nights_stay</span>
+                  Tarde
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-4 space-y-2">
+            <h4 className="text-[10px] font-black uppercase text-gray-400 px-1">Bloqueios Ativos</h4>
+            {blockedSlots.length === 0 ? (
+              <p className="text-center py-4 text-xs text-gray-400 italic">Nenhum horário bloqueado.</p>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1 no-scrollbar">
+                {blockedSlots.map(b => (
+                  <div key={b.id} className="bg-gray-50 dark:bg-black/20 p-4 rounded-2xl border border-gray-100 dark:border-white/5 flex justify-between items-center transition-colors">
+                    <div>
+                      <p className="font-bold text-xs text-slate-900 dark:text-white">{new Date(b.date + 'T00:00:00').toLocaleDateString('pt-BR')} às {b.time}</p>
+                      <p className="text-[10px] text-gray-500">{b.reason}</p>
+                    </div>
+                    <button onClick={() => handleDeleteBlock(b.id)} className="text-gray-400 hover:text-red-500 transition-colors active:scale-90">
+                      <span className="material-symbols-outlined text-sm">delete</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
+
+      {editingDay && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-surface-dark w-full max-w-sm rounded-[32px] overflow-hidden shadow-2xl border border-white/10 p-6 space-y-6">
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white capitalize">{dayNames[editingDay.day_of_week]}</h3>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-gray-400 px-1 mb-1 block">Início Manhã</label>
+                  <input type="time" className="w-full bg-gray-50 dark:bg-background-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white font-bold" value={editingDay.start_time_1 || ''} onChange={e => setEditingDay({...editingDay, start_time_1: e.target.value})} />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-gray-400 px-1 mb-1 block">Fim Manhã</label>
+                  <input type="time" className="w-full bg-gray-50 dark:bg-background-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white font-bold" value={editingDay.end_time_1 || ''} onChange={e => setEditingDay({...editingDay, end_time_1: e.target.value})} />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 py-2">
+                <input type="checkbox" id="afternoon_open" checked={editingDay.is_afternoon_open} onChange={e => setEditingDay({...editingDay, is_afternoon_open: e.target.checked})} />
+                <label htmlFor="afternoon_open" className="text-sm font-bold text-slate-700 dark:text-gray-300">Atender à Tarde?</label>
+              </div>
+
+              {editingDay.is_afternoon_open && (
+                <div className="grid grid-cols-2 gap-3 animate-in slide-in-from-top-2 duration-300">
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-gray-400 px-1 mb-1 block">Início Tarde</label>
+                    <input type="time" className="w-full bg-gray-50 dark:bg-background-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white font-bold" value={editingDay.start_time_2 || ''} onChange={e => setEditingDay({...editingDay, start_time_2: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-gray-400 px-1 mb-1 block">Fim Tarde</label>
+                    <input type="time" className="w-full bg-gray-50 dark:bg-background-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white font-bold" value={editingDay.end_time_2 || ''} onChange={e => setEditingDay({...editingDay, end_time_2: e.target.value})} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => setEditingDay(null)} className="flex-1 py-4 rounded-2xl font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">Cancelar</button>
+              <button onClick={handleSaveDay} className="flex-1 bg-primary text-white py-4 rounded-2xl font-bold shadow-lg shadow-primary/20 active:scale-95 transition-all">Salvar</button>
             </div>
           </div>
         </div>
@@ -2741,94 +2923,6 @@ const AdminWeeklyScheduleScreen: React.FC<{ onBack: () => void }> = ({ onBack })
     </div>
   );
 };
-
-const AdminSettingsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
-  const [startTime, setStartTime] = useState('09:00');
-  const [endTime, setEndTime] = useState('19:00');
-  const [interval, setInterval] = useState('30');
-  const [lunchStart, setLunchStart] = useState('');
-  const [lunchEnd, setLunchEnd] = useState('');
-
-  useEffect(() => {
-    const loadSettings = async () => {
-      const { data } = await supabase.from('settings').select('*');
-      if (data) {
-        const s: any = {};
-        data.forEach((r: any) => s[r.key] = r.value);
-        setStartTime(s.start_time || '09:00');
-        setEndTime(s.end_time || '19:00');
-        setInterval(s.interval_minutes || '30');
-        setLunchStart(s.lunch_start || '');
-        setLunchEnd(s.lunch_end || '');
-      }
-    };
-    loadSettings();
-  }, []);
-
-  const handleSave = async () => {
-    const updates = [
-      { key: 'start_time', value: startTime },
-      { key: 'end_time', value: endTime },
-      { key: 'interval_minutes', value: interval },
-      { key: 'lunch_start', value: lunchStart },
-      { key: 'lunch_end', value: lunchEnd }
-    ];
-
-    // Upsert all
-    const { error } = await supabase.from('settings').upsert(updates);
-
-    if (error) alert('Erro ao salvar: ' + error.message);
-    else alert('Configurações salvas!');
-  };
-
-  return (
-    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col transition-colors">
-      <header className="sticky top-0 z-50 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark flex items-center justify-between backdrop-blur-md transition-colors">
-        <div className="max-w-md mx-auto w-full flex items-center justify-between p-4">
-          <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400 font-bold transition-colors">
-            <span className="material-symbols-outlined">arrow_back</span>
-          </button>
-          <h2 className="font-bold text-slate-900 dark:text-white">Configuração da Agenda</h2>
-          <div className="size-10"></div>
-        </div>
-      </header>
-      <main className="p-4 space-y-6 max-w-md mx-auto w-full">
-        <div className="bg-white dark:bg-surface-dark p-6 rounded-xl border border-gray-200 dark:border-white/10 space-y-4 transition-colors">
-          <div>
-            <label className="text-gray-500 dark:text-gray-400 text-sm block mb-1">Horário de Abertura</label>
-            <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full bg-gray-50 dark:bg-background-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white" />
-          </div>
-          <div>
-            <label className="text-gray-500 dark:text-gray-400 text-sm block mb-1">Horário de Fechamento</label>
-            <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="w-full bg-gray-50 dark:bg-background-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white" />
-          </div>
-          <div>
-            <label className="text-gray-500 dark:text-gray-400 text-sm block mb-1">Intervalo entre Cortes (min)</label>
-            <select value={interval} onChange={e => setInterval(e.target.value)} className="w-full bg-gray-50 dark:bg-background-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white">
-              <option value="15">15 minutos</option>
-              <option value="20">20 minutos</option>
-              <option value="30">30 minutos</option>
-              <option value="40">40 minutos</option>
-              <option value="45">45 minutos</option>
-              <option value="60">1 hora</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-gray-500 dark:text-gray-400 text-sm block mb-1">Início do Almoço (Opcional)</label>
-            <input type="time" value={lunchStart} onChange={e => setLunchStart(e.target.value)} className="w-full bg-gray-50 dark:bg-background-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white" />
-          </div>
-          <div>
-            <label className="text-gray-500 dark:text-gray-400 text-sm block mb-1">Fim do Almoço (Opcional)</label>
-            <input type="time" value={lunchEnd} onChange={e => setLunchEnd(e.target.value)} className="w-full bg-gray-50 dark:bg-background-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white" />
-          </div>
-          <button onClick={handleSave} className="w-full bg-primary text-white py-3 rounded-xl font-bold shadow-lg shadow-primary/20 mt-4">Salvar Configurações</button>
-        </div>
-      </main>
-    </div>
-  );
-};
-
-
 
 const LoginScreen: React.FC<{ onLogin: () => void; onBack: () => void }> = ({ onLogin, onBack }) => {
   const [email, setEmail] = useState('');
@@ -2931,7 +3025,8 @@ const AdminCalendarView: React.FC<{
   onAppointmentClick: (app: Appointment) => void;
   workHours: any[];
   professionals: Professional[];
-}> = ({ appointments, selectedDateStr, onDateChange, onAppointmentClick, workHours, professionals }) => {
+  blockedSlots: any[];
+}> = ({ appointments, selectedDateStr, onDateChange, onAppointmentClick, workHours, professionals, blockedSlots }) => {
   const [selectedProId, setSelectedProId] = useState<string | 'ALL'>('ALL');
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -3000,6 +3095,20 @@ const AdminCalendarView: React.FC<{
 
           {/* Events Area */}
           <div className="flex-1 relative bg-white dark:bg-surface-dark bg-[linear-gradient(to_bottom,transparent_119px,rgba(0,0,0,0.05)_120px)] dark:bg-[linear-gradient(to_bottom,transparent_119px,rgba(255,255,255,0.05)_120px)] bg-[size:100%_120px]">
+            {/* Blocked Slots Overlay */}
+            {blockedSlots.filter(b => b.date === selectedDateStr).map(block => {
+              const pos = getPosition(block.time || '08:00', 60);
+              return (
+                <div 
+                  key={block.id}
+                  className="absolute left-0 right-0 hatched-red z-0 flex items-center justify-center overflow-hidden"
+                  style={{ top: `${pos.top}px`, height: `${pos.height}px` }}
+                >
+                  <div className="rotate-12 opacity-20 whitespace-nowrap text-[10px] font-black uppercase select-none text-red-600 dark:text-red-400">BLOQUEADO: {block.reason}</div>
+                </div>
+              );
+            })}
+
             {dayApps.map(app => {
               const totalDuration = app.services.reduce((sum, s) => sum + s.duration, 0) || 30;
               const pos = getPosition(app.time, totalDuration);
@@ -3050,6 +3159,101 @@ const AdminCalendarView: React.FC<{
               }
               return null;
             })()}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const AdminWeeklyCalendarView: React.FC<{
+  appointments: Appointment[];
+  blockedSlots: any[];
+  professionals: Professional[];
+  selectedDateStr: string;
+  onDateChange: (dateStr: string) => void;
+  onAppointmentClick: (app: Appointment) => void;
+}> = ({ appointments, blockedSlots, professionals, selectedDateStr, onDateChange, onAppointmentClick }) => {
+  const [startOfWeekDate, setStartOfWeekDate] = useState(startOfWeek(parseISO(selectedDateStr), { weekStartsOn: 1 }));
+  
+  useEffect(() => {
+    setStartOfWeekDate(startOfWeek(parseISO(selectedDateStr), { weekStartsOn: 1 }));
+  }, [selectedDateStr]);
+
+  const days = Array.from({ length: 7 }, (_, i) => addDays(startOfWeekDate, i));
+  const START_HOUR = 8;
+  const END_HOUR = 20;
+  const PIXELS_PER_MINUTE = 1.5;
+
+  const getPosition = (timeStr: string, duration: number) => {
+    const [h, m] = timeStr.split(':').map(Number);
+    const startMinutes = (h * 60 + m) - (START_HOUR * 60);
+    return { top: startMinutes * PIXELS_PER_MINUTE, height: duration * PIXELS_PER_MINUTE };
+  };
+
+  const navWeek = (amount: number) => {
+    const newDate = addDays(startOfWeekDate, amount * 7);
+    onDateChange(format(newDate, 'yyyy-MM-dd'));
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-white dark:bg-surface-dark rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-xl animate-fade-in transition-all">
+      <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-white/5 bg-gray-50/50 dark:bg-background-dark/50 backdrop-blur-sm">
+        <div className="flex items-center gap-1">
+          <button onClick={() => navWeek(-1)} className="p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-full text-slate-900 dark:text-white transition-all"><span className="material-symbols-outlined">chevron_left</span></button>
+          <button onClick={() => onDateChange(format(new Date(), 'yyyy-MM-dd'))} className="px-3 py-1.5 text-[10px] font-black uppercase tracking-widest bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-full text-slate-600 dark:text-gray-300 hover:bg-gray-50 transition-all active:scale-95 shadow-sm">Hoje</button>
+          <button onClick={() => navWeek(1)} className="p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-full text-slate-900 dark:text-white transition-all"><span className="material-symbols-outlined">chevron_right</span></button>
+        </div>
+        <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+          Semana de {format(days[0], 'dd/MM')} a {format(days[6], 'dd/MM')}
+        </h3>
+        <div className="w-8"></div>
+      </div>
+      <div className="flex-1 overflow-auto no-scrollbar relative" style={{ height: '650px' }}>
+        <div className="flex min-w-[900px] relative h-full">
+          <div className="w-12 flex-shrink-0 border-r border-gray-100 dark:border-white/5 sticky left-0 bg-white/95 dark:bg-surface-dark/95 z-20 backdrop-blur-sm">
+            {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i).map(h => (
+              <div key={h} className="h-[90px] border-b border-gray-50 dark:border-white/5 text-[9px] font-black text-gray-400 text-center pt-1.5">{String(h).padStart(2, '0')}:00</div>
+            ))}
+          </div>
+          <div className="flex-1 flex">
+            {days.map((day) => {
+              const dayStr = format(day, 'yyyy-MM-dd');
+              const isToday = dayStr === format(new Date(), 'yyyy-MM-dd');
+              const dayApps = appointments.filter(a => a.date === dayStr && a.status !== 'CANCELLED');
+              const dayBlocks = blockedSlots.filter(b => b.date === dayStr);
+              return (
+                <div key={dayStr} className={`flex-1 min-w-[120px] border-r border-gray-100 dark:border-white/5 relative ${isToday ? 'bg-primary/5' : ''}`}>
+                  <div className={`sticky top-0 z-10 p-2 text-center border-b border-gray-100 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md ${isToday ? 'text-primary' : 'text-slate-600 dark:text-gray-400'}`}>
+                    <div className="text-[9px] font-black uppercase tracking-tighter opacity-60 mb-0.5">{format(day, 'EEE', { locale: ptBR })}</div>
+                    <div className={`text-sm font-black size-7 flex items-center justify-center mx-auto rounded-full ${isToday ? 'bg-primary text-white shadow-lg shadow-primary/30' : ''}`}>{format(day, 'd')}</div>
+                  </div>
+                  <div className="relative h-full bg-[linear-gradient(to_bottom,transparent_89px,rgba(0,0,0,0.015)_90px)] dark:bg-[linear-gradient(to_bottom,transparent_89px,rgba(255,255,255,0.015)_90px)] bg-[size:100%_90px]">
+                    {dayBlocks.map(block => {
+                      const pos = getPosition(block.time || '08:00', 60);
+                      return (
+                        <div 
+                          key={block.id} 
+                          className="absolute left-0 right-0 hatched-red z-0" 
+                          style={{ top: `${pos.top}px`, height: `${pos.height}px` }} 
+                        />
+                      );
+                    })}
+                    {dayApps.map(app => {
+                      const duration = app.services.reduce((s, x) => s + x.duration, 0) || 30;
+                      const pos = getPosition(app.time, duration);
+                      const pro = professionals.find(p => p.id === app.professionalId);
+                      return (
+                        <div key={app.id} onClick={() => onAppointmentClick(app)} className="absolute left-0.5 right-0.5 rounded p-1 shadow-sm cursor-pointer z-10 overflow-hidden" style={{ top: `${pos.top}px`, height: `${pos.height}px`, backgroundColor: pro?.color ? `${pro.color}15` : '#eee', borderLeft: `3px solid ${pro?.color || '#999'}` }}>
+                          <div className="text-[9px] font-black truncate leading-tight text-slate-800 dark:text-white">{app.customerName}</div>
+                          <div className="text-[8px] opacity-60 truncate">{app.services.map(s => s.name).join(', ')}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -3266,7 +3470,7 @@ const AdminDashboard: React.FC<{
   onWeeklySchedule: () => void;
   onFinance: () => void;
   onTV: () => void;
-  onSubscriptions: () => void;
+  onClubManagement: () => void;
   onRefresh: () => void;
   onClients: () => void;
   onProfessionals: () => void;
@@ -3274,7 +3478,8 @@ const AdminDashboard: React.FC<{
   setAppointments: React.Dispatch<React.SetStateAction<Appointment[]>>;
   unreadCount: number;
   professionals: Professional[];
-}> = ({ appointments, showPastHistory, setShowPastHistory, onLogout, onOpenChat, onManageServices, onBlockSchedule, onSettings, onWeeklySchedule, onFinance, onTV, onSubscriptions, onManagePlans, onRefresh, onClients, onProfessionals, onManageProducts, setAppointments, unreadCount, professionals }) => {
+  blockedSlots: any[];
+}> = ({ appointments, showPastHistory, setShowPastHistory, onLogout, onOpenChat, onManageServices, onBlockSchedule, onSettings, onWeeklySchedule, onFinance, onTV, onClubManagement, onRefresh, onClients, onProfessionals, onManageProducts, setAppointments, unreadCount, professionals, blockedSlots }) => {
   const availableDays = useMemo(() => getNextDays(7), []);
   const [selectedDateStr, setSelectedDateStr] = useState(availableDays[0].dateStr); // Default to local today string
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -3401,140 +3606,99 @@ const AdminDashboard: React.FC<{
       <main className="p-4 pb-24 max-w-md mx-auto w-full">
         {/* Actions Grid */}
         <div className="grid grid-cols-2 gap-3 mb-6">
-          <button
+          <motion.button
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
             onClick={onClients}
-            className="relative group flex flex-col p-4 rounded-3xl bg-white dark:bg-surface-dark border border-gray-100 dark:border-white/5 hover:border-primary/30 active:scale-[0.98] transition-all overflow-hidden shadow-lg h-32 justify-between"
+            className="relative group flex flex-col p-4 rounded-3xl bg-white dark:bg-surface-dark border border-gray-100 dark:border-white/5 hover:border-orange-500/30 transition-all overflow-hidden shadow-lg h-32 justify-between glass-effect"
           >
             <div className="size-10 rounded-xl bg-orange-500 flex items-center justify-center text-white shadow-lg shadow-orange-500/20">
               <span className="material-symbols-outlined filled">group</span>
             </div>
             <div className="text-left">
               <h3 className="font-bold text-slate-900 dark:text-white">Clientes</h3>
-              <p className="text-orange-500 text-[10px] font-bold uppercase tracking-widest">Gerenciar</p>
+              <p className="text-orange-500 text-[10px] font-bold uppercase tracking-widest leading-tight">Gestão de Experiência</p>
             </div>
-          </button>
+          </motion.button>
 
-          <button
+          <motion.button
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
             onClick={onManageServices}
-            className="relative group flex flex-col p-4 rounded-3xl bg-white dark:bg-surface-dark border border-gray-100 dark:border-white/5 hover:border-primary/30 active:scale-[0.98] transition-all overflow-hidden shadow-lg h-32 justify-between"
+            className="relative group flex flex-col p-4 rounded-3xl bg-white dark:bg-surface-dark border border-gray-100 dark:border-white/5 hover:border-purple-500/30 transition-all overflow-hidden shadow-lg h-32 justify-between glass-effect"
           >
             <div className="size-10 rounded-xl bg-purple-500 flex items-center justify-center text-white shadow-lg shadow-purple-500/20">
               <span className="material-symbols-outlined filled">content_cut</span>
             </div>
             <div className="text-left">
               <h3 className="font-bold text-slate-900 dark:text-white">Serviços</h3>
-              <p className="text-gray-500 dark:text-white/70 text-[10px] font-bold uppercase tracking-widest">Editar/Add</p>
+              <p className="text-gray-500 dark:text-gray-400 text-[10px] font-bold uppercase tracking-widest leading-tight">Catálogo & Especialidades</p>
             </div>
-          </button>
+          </motion.button>
 
-          <button
-            onClick={onOpenChat}
-            className="relative group flex flex-col p-4 rounded-3xl bg-white dark:bg-surface-dark border border-gray-100 dark:border-white/5 hover:border-primary/30 active:scale-[0.98] transition-all overflow-hidden shadow-lg h-32 justify-between"
-          >
-            {unreadCount > 0 && (
-              <div className="absolute top-3 right-3 size-6 bg-red-500 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm animate-bounce-custom">
-                {unreadCount}
-              </div>
-            )}
-            <div className="size-10 rounded-xl bg-primary flex items-center justify-center text-white shadow-lg shadow-primary/20">
-              <span className="material-symbols-outlined filled">chat</span>
-            </div>
-            <div className="text-left">
-              <h3 className="font-bold text-slate-900 dark:text-white">Chat</h3>
-              <p className="text-gray-500 dark:text-white/70 text-[10px] font-bold uppercase tracking-widest">Conversas</p>
-            </div>
-          </button>
-
-          <button
+          <motion.button
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
             onClick={onFinance}
-            className="relative group flex flex-col p-4 rounded-3xl bg-white dark:bg-surface-dark border border-gray-100 dark:border-white/5 hover:border-primary/30 active:scale-[0.98] transition-all overflow-hidden shadow-lg h-32 justify-between"
+            className="relative group flex flex-col p-4 rounded-3xl bg-white dark:bg-surface-dark border border-gray-100 dark:border-white/5 hover:border-emerald-500/30 transition-all overflow-hidden shadow-lg h-32 justify-between glass-effect"
           >
             <div className="size-10 rounded-xl bg-emerald-500 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
               <span className="material-symbols-outlined filled">payments</span>
             </div>
             <div className="text-left">
               <h3 className="font-bold text-slate-900 dark:text-white">Financeiro</h3>
-              <p className="text-emerald-500 text-[10px] font-bold uppercase tracking-widest">Relatórios</p>
+              <p className="text-emerald-500 text-[10px] font-bold uppercase tracking-widest leading-tight">Inteligência de Receita</p>
             </div>
-          </button>
+          </motion.button>
 
-          <button
-            onClick={onBlockSchedule}
-            className="relative group flex flex-col p-4 rounded-3xl bg-white dark:bg-surface-dark border border-gray-100 dark:border-white/5 hover:border-primary/30 active:scale-[0.98] transition-all overflow-hidden shadow-lg h-32 justify-between"
+          <motion.button
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={onSettings}
+            className="relative group flex flex-col p-4 rounded-3xl bg-white dark:bg-surface-dark border border-gray-100 dark:border-white/5 hover:border-blue-500/30 transition-all overflow-hidden shadow-lg h-32 justify-between glass-effect"
           >
-            <div className="size-10 rounded-xl bg-red-500 flex items-center justify-center text-white shadow-lg shadow-red-500/20">
-              <span className="material-symbols-outlined filled">event_busy</span>
-            </div>
-            <div className="text-left">
-              <h3 className="font-bold text-slate-900 dark:text-white">Bloquear</h3>
-              <p className="text-gray-500 dark:text-white/70 text-[10px] font-bold uppercase tracking-widest">Fechar Horários</p>
-            </div>
-          </button>
-
-          <button
-            onClick={onWeeklySchedule}
-            className="relative group flex flex-col p-4 rounded-3xl bg-white dark:bg-surface-dark border border-gray-100 dark:border-white/5 hover:border-primary/30 active:scale-[0.98] transition-all overflow-hidden shadow-lg h-32 justify-between"
-          >
-            <div className="size-10 rounded-xl bg-orange-500 flex items-center justify-center text-white shadow-lg shadow-orange-500/20">
-              <span className="material-symbols-outlined filled">calendar_clock</span>
+            <div className="size-10 rounded-xl bg-blue-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
+              <span className="material-symbols-outlined filled">settings</span>
             </div>
             <div className="text-left">
               <h3 className="font-bold text-slate-900 dark:text-white">Horários</h3>
-              <p className="text-gray-500 dark:text-white/70 text-[10px] font-bold uppercase tracking-widest">Configurar Semana</p>
+              <p className="text-blue-500 text-[10px] font-bold uppercase tracking-widest leading-tight">Controle de Agenda</p>
             </div>
-          </button>
+          </motion.button>
 
-          <button
-            onClick={subscribeUser}
-            className="relative group flex flex-col p-4 rounded-3xl bg-white dark:bg-surface-dark border border-gray-100 dark:border-white/5 hover:border-primary/30 active:scale-[0.98] transition-all overflow-hidden shadow-lg h-32 justify-between"
-          >
-            <div className="size-10 rounded-xl bg-cyan-500 flex items-center justify-center text-white shadow-lg shadow-cyan-500/20">
-              <span className="material-symbols-outlined filled">notifications_active</span>
-            </div>
-            <div className="text-left">
-              <h3 className="font-bold text-slate-900 dark:text-white">Alertas</h3>
-              <p className="text-cyan-500 dark:text-cyan-400 text-[10px] font-bold uppercase tracking-widest">Ativar Push</p>
-            </div>
-          </button>
 
-          <button
+          <motion.button
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
             onClick={onProfessionals}
-            className="relative group flex flex-col p-4 rounded-3xl bg-white dark:bg-surface-dark border border-gray-100 dark:border-white/5 hover:border-primary/30 active:scale-[0.98] transition-all overflow-hidden shadow-lg h-32 justify-between"
+            className="relative group flex flex-col p-4 rounded-3xl bg-white dark:bg-surface-dark border border-gray-100 dark:border-white/5 hover:border-blue-600/30 transition-all overflow-hidden shadow-lg h-32 justify-between glass-effect"
           >
             <div className="size-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/20">
               <span className="material-symbols-outlined filled">badge</span>
             </div>
             <div className="text-left">
               <h3 className="font-bold text-slate-900 dark:text-white">Equipe</h3>
-              <p className="text-blue-600 dark:text-blue-400 text-[10px] font-bold uppercase tracking-widest">Profissionais</p>
+              <p className="text-blue-600 dark:text-blue-400 text-[10px] font-bold uppercase tracking-widest leading-tight">Corpo de Especialistas</p>
             </div>
-          </button>
+          </motion.button>
 
-          <button
-            onClick={onSubscriptions}
-            className="relative group flex flex-col p-4 rounded-3xl bg-white dark:bg-surface-dark border border-gray-100 dark:border-white/5 hover:border-primary/30 active:scale-[0.98] transition-all overflow-hidden shadow-lg h-32 justify-between"
+          <motion.button
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={onClubManagement}
+            className="relative group flex flex-col p-4 rounded-3xl bg-white dark:bg-surface-dark border border-gray-100 dark:border-white/5 hover:border-amber-500/30 transition-all overflow-hidden shadow-lg h-32 justify-between glass-effect"
           >
-            <div className="size-10 rounded-xl bg-amber-500 flex items-center justify-center text-white shadow-lg shadow-amber-500/20">
-              <span className="material-symbols-outlined filled">card_membership</span>
+            <div className="size-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-600 flex items-center justify-center text-white shadow-lg shadow-amber-500/20">
+              <span className="material-symbols-outlined filled">stars</span>
             </div>
             <div className="text-left">
-              <h3 className="font-bold text-slate-900 dark:text-white">Assinaturas</h3>
-              <p className="text-amber-600 dark:text-amber-500 text-[10px] font-bold uppercase tracking-widest">Aprovar/Ver</p>
+              <div className="flex items-center gap-1 flex-wrap">
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm leading-tight">Cabelo Perfeito</h3>
+                <span className="text-[7px] bg-amber-500/10 text-amber-600 px-1 py-0.5 rounded-full font-black border border-amber-500/20">VIP</span>
+              </div>
+              <p className="text-amber-600 dark:text-amber-500 text-[9px] font-bold uppercase tracking-wide leading-tight mt-0.5">Clube & Planos</p>
             </div>
-          </button>
-
-          <button
-            onClick={onManagePlans}
-            className="relative group flex flex-col p-4 rounded-3xl bg-white dark:bg-surface-dark border border-gray-100 dark:border-white/5 hover:border-primary/30 active:scale-[0.98] transition-all overflow-hidden shadow-lg h-32 justify-between"
-          >
-            <div className="size-10 rounded-xl bg-gray-600 flex items-center justify-center text-white shadow-lg shadow-gray-600/20">
-              <span className="material-symbols-outlined filled">settings_applications</span>
-            </div>
-            <div className="text-left">
-              <h3 className="font-bold text-slate-900 dark:text-white">Planos</h3>
-              <p className="text-gray-500 dark:text-gray-400 text-[10px] font-bold uppercase tracking-widest">Preços/QR</p>
-            </div>
-          </button>
+          </motion.button>
 
           <button
             onClick={onManageProducts}
@@ -3545,7 +3709,7 @@ const AdminDashboard: React.FC<{
             </div>
             <div className="text-left">
               <h3 className="font-bold text-slate-900 dark:text-white">Vitrine</h3>
-              <p className="text-pink-500 text-[10px] font-bold uppercase tracking-widest">Produtos</p>
+              <p className="text-pink-500 text-[10px] font-bold uppercase tracking-widest leading-tight">Curadoria & Boutique</p>
             </div>
           </button>
 
@@ -3558,32 +3722,10 @@ const AdminDashboard: React.FC<{
             </div>
             <div className="text-left">
               <h3 className="font-bold text-white">Modo TV</h3>
-              <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">Painel</p>
+              <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest leading-tight">Exibição Digital</p>
             </div>
           </button>
 
-          <button
-            onClick={() => {
-               if (window.confirm('Isso irá deslogar você, limpar todo o cache e recarregar o app. Útil para resolver erros de carregamento. Continuar?')) {
-                  localStorage.clear();
-                  if ('serviceWorker' in navigator) {
-                    navigator.serviceWorker.getRegistrations().then(registrations => {
-                      for(let registration of registrations) registration.unregister();
-                    });
-                  }
-                  window.location.reload();
-               }
-            }}
-            className="relative group flex flex-col p-4 rounded-3xl bg-red-950 border border-red-900/30 hover:border-red-500 active:scale-[0.98] transition-all overflow-hidden shadow-lg h-32 justify-between"
-          >
-            <div className="size-10 rounded-xl bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-600/20">
-              <span className="material-symbols-outlined filled">cleaning_services</span>
-            </div>
-            <div className="text-left">
-              <h3 className="font-bold text-white">Limpar Tudo</h3>
-              <p className="text-red-400 text-[10px] font-bold uppercase tracking-widest">Resolver Erros</p>
-            </div>
-          </button>
         </div>
 
         {/* View Toggle & Header */}
@@ -3641,12 +3783,24 @@ const AdminDashboard: React.FC<{
               <button onClick={() => setViewMode('CALENDAR')} className={`px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 transition-all ${viewMode === 'CALENDAR' ? 'bg-white dark:bg-surface-dark shadow text-slate-900 dark:text-white' : 'text-gray-400'}`}>
                 <span className="material-symbols-outlined text-base">calendar_view_day</span>
               </button>
+              <button onClick={() => setViewMode('WEEKLY')} className={`px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 transition-all ${viewMode === 'WEEKLY' ? 'bg-white dark:bg-surface-dark shadow text-slate-900 dark:text-white' : 'text-gray-400'}`}>
+                <span className="material-symbols-outlined text-base">calendar_view_week</span>
+              </button>
             </div>
           </div>
         </div>
 
         {
-          viewMode === 'CALENDAR' ? (
+          viewMode === 'WEEKLY' ? (
+            <AdminWeeklyCalendarView
+              appointments={appointments}
+              blockedSlots={blockedSlots}
+              professionals={professionals}
+              selectedDateStr={selectedDateStr}
+              onDateChange={setSelectedDateStr}
+              onAppointmentClick={(app) => setActiveMenuId(app.id)}
+            />
+          ) : viewMode === 'CALENDAR' ? (
             <div className="animate-fade-in relative z-0">
               <AdminCalendarView
                 appointments={appointments}
@@ -3654,6 +3808,7 @@ const AdminDashboard: React.FC<{
                 onDateChange={setSelectedDateStr}
                 workHours={workHours}
                 professionals={professionals}
+                blockedSlots={blockedSlots}
                 onAppointmentClick={(app) => setActiveMenuId(app.id)}
               />
               {activeMenuId && (
@@ -3923,7 +4078,7 @@ Dúvidas, responder a essa mensagem!`)}`}
                     <div key={app.id} className="bg-gray-50 dark:bg-white/5 p-4 rounded-2xl border border-transparent flex justify-between items-center group grayscale hover:grayscale-0 transition-all">
                       <div className="flex items-center gap-3">
                         <div className="size-10 rounded-full bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400 flex items-center justify-center font-bold">
-                          {app.customerName.charAt(0)}
+                          {(app.customerName || '?').charAt(0)}
                         </div>
                         <div>
                           <p className="font-bold text-slate-900 dark:text-white strike-through decoration-slate-900/30">{app.customerName}</p>
@@ -4019,61 +4174,93 @@ const AdminServicesScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     }
   };
 
-  const handleSave = async () => {
-    if (!editingService.name || !editingService.price) return;
-    setLoading(true);
-
-    const payload = {
-      name: editingService.name,
-      description: editingService.description,
-      price: editingService.price,
-      duration: editingService.duration,
-      image_url: editingService.imageUrl,
-      category_id: editingService.category_id,
-      is_active: true
-    };
-
-    let error;
-    if (editingService.id) {
-      const { error: err } = await supabase
-        .from('services')
-        .update(payload)
-        .eq('id', editingService.id);
-      error = err;
-    } else {
-      const { error: err } = await supabase
-        .from('services')
-        .insert(payload);
-      error = err;
+  const handleSaveService = async () => {
+    // Basic validation
+    if (!editingService.name || (!editingService.price && editingService.price !== 0)) {
+      alert('Por favor, preencha o nome e o preço do serviço.');
+      return;
     }
 
-    setLoading(false);
-    if (error) {
-      console.error(error);
-      alert('Erro ao salvar serviço');
-    } else {
+    setLoading(true);
+
+    try {
+      // Robust type conversion for Supabase
+      const finalDuration = parseInt(String(editingService.duration || 30));
+      const finalPrice = parseFloat(String(editingService.price || 0));
+      const finalCategoryId = (editingService.category_id && editingService.category_id !== '') 
+        ? Number(editingService.category_id) 
+        : null;
+
+      const payload: any = {
+        name: editingService.name,
+        description: editingService.description || '',
+        price: isNaN(finalPrice) ? 0 : finalPrice,
+        duration: isNaN(finalDuration) ? 30 : finalDuration, 
+        image_url: editingService.imageUrl || '',
+        category_id: finalCategoryId,
+        is_active: true
+      };
+
+      console.log('Final Payload for Supabase:', payload);
+
+      let error;
+      if (editingService.id) {
+        const { error: err } = await supabase
+          .from('services')
+          .update(payload)
+          .eq('id', editingService.id);
+        error = err;
+      } else {
+        const { error: err } = await supabase
+          .from('services')
+          .insert(payload);
+        error = err;
+      }
+
+      if (error) throw error;
+
       setIsEditing(false);
       setEditingService({});
-      fetchData();
+      await fetchData();
+    } catch (err: any) {
+      console.error('Error saving service:', err);
+      alert('Erro ao salvar serviço: ' + (err.message || 'Erro desconhecido'));
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleSaveCat = async () => {
+  const handleSaveCategory = async () => {
     if (!editingCat?.name) return;
     setLoading(true);
-    const payload = { 
-      name: editingCat.name, 
-      icon: editingCat.icon, 
-      description: editingCat.description,
-      display_order: editingCat.display_order || 0 
-    };
     
-    let error;
-    if (editingCat.id) error = (await supabase.from('service_categories').update(payload).eq('id', editingCat.id)).error;
-    else error = (await supabase.from('service_categories').insert(payload)).error;
-    
-    setLoading(false);
-    if (!error) { setEditingCat(null); fetchData(); }
+    try {
+      const payload = { 
+        name: editingCat.name, 
+        icon: editingCat.icon, 
+        description: editingCat.description,
+        display_order: editingCat.display_order || 0 
+      };
+      
+      let error;
+      if (editingCat.id) {
+        const { error: err } = await supabase.from('service_categories').update(payload).eq('id', editingCat.id);
+        error = err;
+      } else {
+        const { error: err } = await supabase.from('service_categories').insert(payload);
+        error = err;
+      }
+      
+      if (error) throw error;
+      
+      setEditingCat(null); 
+      await fetchData(); 
+    } catch (err: any) {
+      console.error('Error saving category:', err);
+      alert('Erro ao salvar categoria: ' + (err.message || 'Erro desconhecido'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDeleteCat = async (id: string) => {
@@ -4110,11 +4297,30 @@ const AdminServicesScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase text-gray-400 px-1">Preço (R$)</label>
-              <input type="number" className="w-full bg-white dark:bg-surface-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-gray-400" placeholder="0.00" value={editingService.price || ''} onChange={e => setEditingService({ ...editingService, price: parseFloat(e.target.value) })} />
+              <input 
+                type="number" 
+                step="0.01"
+                className="w-full bg-white dark:bg-surface-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-gray-400" 
+                placeholder="0.00" 
+                value={editingService.price || ''} 
+                onChange={e => {
+                  const val = e.target.value;
+                  setEditingService(prev => ({ ...prev, price: val === '' ? undefined : parseFloat(val) }));
+                }} 
+              />
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase text-gray-400 px-1">Duração (min)</label>
-              <input type="number" className="w-full bg-white dark:bg-surface-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-gray-400" placeholder="30" value={editingService.duration || ''} onChange={e => setEditingService({ ...editingService, duration: parseInt(e.target.value) })} />
+              <input 
+                type="number" 
+                className="w-full bg-white dark:bg-surface-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-gray-400" 
+                placeholder="30" 
+                value={editingService.duration ?? ''} 
+                onChange={e => {
+                  const val = e.target.value;
+                  setEditingService(prev => ({ ...prev, duration: val === '' ? undefined : parseInt(val) }));
+                }} 
+              />
             </div>
           </div>
 
@@ -4126,7 +4332,10 @@ const AdminServicesScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   className="w-full bg-white dark:bg-surface-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-xs text-slate-900 dark:text-white placeholder:text-gray-400 truncate pr-10" 
                   placeholder="URL ou carregue um arquivo" 
                   value={editingService.imageUrl || ''} 
-                  onChange={e => setEditingService({ ...editingService, imageUrl: e.target.value })} 
+                  onChange={e => {
+                    const val = e.target.value;
+                    setEditingService(prev => ({ ...prev, imageUrl: val }));
+                  }} 
                 />
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
                   <span className="material-symbols-outlined text-sm">{editingService.imageUrl ? 'link' : 'image'}</span>
@@ -4149,7 +4358,10 @@ const AdminServicesScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             <label className="text-[10px] font-black uppercase text-gray-400 px-1">Categoria</label>
             <select 
               value={editingService.category_id || ''} 
-              onChange={e => setEditingService({ ...editingService, category_id: e.target.value })}
+              onChange={e => {
+                const val = e.target.value;
+                setEditingService(prev => ({ ...prev, category_id: val }));
+              }}
               className="w-full bg-white dark:bg-surface-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white"
             >
               <option value="">Sem Categoria</option>
@@ -4157,7 +4369,7 @@ const AdminServicesScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             </select>
           </div>
 
-          <button onClick={handleSave} disabled={loading} className="w-full bg-primary text-white py-4 rounded-xl font-bold shadow-lg shadow-primary/20">
+          <button onClick={handleSaveService} disabled={loading} className="w-full bg-primary text-white py-4 rounded-xl font-bold shadow-lg shadow-primary/20">
             {loading ? 'Salvando...' : 'Salvar Serviço'}
           </button>
         </div>
@@ -4257,7 +4469,13 @@ const AdminServicesScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                 <div {...provided.dragHandleProps} className="text-gray-400 hover:text-gray-600 p-1 shrink-0">
                                   <span className="material-symbols-outlined text-lg">drag_indicator</span>
                                 </div>
-                                <img src={s.imageUrl} className="size-12 rounded-lg object-cover bg-gray-100 dark:bg-gray-800 shrink-0" />
+                                {s.imageUrl ? (
+                                  <img src={s.imageUrl} className="size-12 rounded-lg object-cover bg-gray-100 dark:bg-gray-800 shrink-0" />
+                                ) : (
+                                  <div className="size-12 rounded-lg bg-gray-100 dark:bg-white/5 flex items-center justify-center shrink-0">
+                                    <span className="material-symbols-outlined text-gray-400">image</span>
+                                  </div>
+                                )}
                                 <div className="flex-1 min-w-0">
                                   <h3 className="font-bold text-xs text-slate-900 dark:text-white truncate">{s.name}</h3>
                                   <p className="text-[10px] text-gray-500 font-medium">R$ {s.price.toFixed(2)} • {s.duration} min</p>
@@ -4287,7 +4505,13 @@ const AdminServicesScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               <div className="space-y-2">
                 {services.filter(s => !s.category_id).map(s => (
                   <div key={s.id} className="bg-white/50 dark:bg-surface-dark/50 p-3 rounded-xl border border-gray-100 dark:border-white/5 flex gap-3 items-center opacity-80">
-                     <img src={s.imageUrl} className="size-10 rounded-lg object-cover grayscale opacity-50 shrink-0" />
+                     {s.imageUrl ? (
+                        <img src={s.imageUrl} className="size-10 rounded-lg object-cover grayscale opacity-50 shrink-0" />
+                     ) : (
+                        <div className="size-10 rounded-lg bg-gray-100 dark:bg-white/5 flex items-center justify-center shrink-0 opacity-50">
+                          <span className="material-symbols-outlined text-gray-400 text-sm">image</span>
+                        </div>
+                     )}
                      <div className="flex-1 min-w-0">
                         <h3 className="text-xs font-bold text-gray-500 truncate">{s.name}</h3>
                      </div>
@@ -4339,7 +4563,7 @@ const AdminServicesScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               </div>
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setEditingCat(null)} className="flex-1 py-4 font-bold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors uppercase text-xs tracking-widest">Cancelar</button>
-                <button onClick={handleSaveCat} className="flex-1 py-4 bg-primary text-white font-bold rounded-2xl shadow-lg shadow-primary/20 active:scale-95 transition-all text-xs tracking-widest uppercase">Salvar</button>
+                <button onClick={handleSaveCategory} className="flex-1 py-4 bg-primary text-white font-bold rounded-2xl shadow-lg shadow-primary/20 active:scale-95 transition-all text-xs tracking-widest uppercase">Salvar</button>
               </div>
               {editingCat.id && (
                 <button onClick={() => { if(editingCat.id) handleDeleteCat(editingCat.id); }} className="w-full text-red-500 text-[10px] font-black uppercase tracking-widest hover:underline pt-2">Excluir Categoria</button>
@@ -4700,9 +4924,9 @@ const SubscriptionPaymentScreen: React.FC<{
           <h3 className="font-bold text-slate-900 dark:text-white mb-4">Escaneie o QR Code para pagar</h3>
           <div className="size-48 bg-gray-100 rounded-2xl flex items-center justify-center border-4 border-slate-900 dark:border-white mb-4 overflow-hidden shadow-inner">
             {plan.qr_code_url ? (
-              <img src={plan.qr_code_url} alt="QR Code PIX" className="w-full h-full object-cover" />
+               <img src={plan.qr_code_url} alt="QR Code PIX" className="w-full h-full object-cover" />
             ) : (
-              <span className="material-symbols-outlined text-6xl text-gray-300">qr_code_2</span>
+               <span className="material-symbols-outlined text-6xl text-gray-300">qr_code_2</span>
             )}
           </div>
           <p className="text-xs text-gray-500 mb-6">Realize o pagamento e anexe o comprovante abaixo para ativação.</p>
@@ -4789,7 +5013,8 @@ const SubscriptionPaymentScreen: React.FC<{
 
 const AdminSubscriptionsScreen: React.FC<{
   onBack: () => void;
-}> = ({ onBack }) => {
+  hideHeader?: boolean;
+}> = ({ onBack, hideHeader }) => {
   const [subs, setSubs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedProof, setSelectedProof] = useState<string | null>(null);
@@ -4831,15 +5056,17 @@ const AdminSubscriptionsScreen: React.FC<{
   };
 
   return (
-    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col pb-12 transition-colors">
-      <header className="sticky top-0 z-50 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md transition-colors">
-        <div className="max-w-4xl mx-auto w-full flex items-center p-4">
-          <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
-            <span className="material-symbols-outlined text-gray-600 dark:text-white font-bold">arrow_back</span>
-          </button>
-          <h2 className="text-lg font-bold flex-1 text-center pr-10 text-slate-900 dark:text-white">Gerenciar Assinaturas</h2>
-        </div>
-      </header>
+    <div className={`bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col pb-12 transition-colors ${hideHeader ? 'min-h-0 bg-none pb-0' : ''}`}>
+      {!hideHeader && (
+        <header className="sticky top-0 z-50 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md transition-colors">
+          <div className="max-w-4xl mx-auto w-full flex items-center p-4">
+            <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
+              <span className="material-symbols-outlined text-gray-600 dark:text-white font-bold">arrow_back</span>
+            </button>
+            <h2 className="text-lg font-bold flex-1 text-center pr-10 text-slate-900 dark:text-white">Gerenciar Assinaturas</h2>
+          </div>
+        </header>
+      )}
 
       <main className="p-4 space-y-4 max-w-4xl mx-auto w-full">
         {loading ? (
@@ -5001,7 +5228,8 @@ const AdminSubscriptionsScreen: React.FC<{
 
 const AdminManagePlansScreen: React.FC<{
   onBack: () => void;
-}> = ({ onBack }) => {
+  hideHeader?: boolean;
+}> = ({ onBack, hideHeader }) => {
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
@@ -5021,6 +5249,8 @@ const AdminManagePlansScreen: React.FC<{
     qr_code_url: '',
     service_limits: {}
   });
+
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Sync localLimits whenever plans data is refreshed from DB
   useEffect(() => {
@@ -5142,157 +5372,236 @@ const AdminManagePlansScreen: React.FC<{
     }
   };
 
+  const handleDeletePlan = async (id: string) => {
+    const { error } = await supabase
+      .from('subscription_plans')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      alert('Erro ao excluir plano: ' + error.message);
+    } else {
+      setConfirmDeleteId(null);
+      fetchPlans();
+    }
+  };
+
   return (
-    <div className="bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col pb-12 transition-colors">
-      <header className="sticky top-0 z-50 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md transition-colors">
-        <div className="max-w-2xl mx-auto w-full flex items-center p-4">
-          <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
-            <span className="material-symbols-outlined text-gray-600 dark:text-white font-bold">arrow_back</span>
-          </button>
-          <h2 className="text-lg font-bold flex-1 text-center text-slate-900 dark:text-white">Planos de Assinatura</h2>
-          <button 
-            onClick={() => setIsCreating(true)}
-            className="size-10 rounded-full flex items-center justify-center bg-primary text-white shadow-lg shadow-primary/20 active:scale-95 transition-all"
-          >
-            <span className="material-symbols-outlined font-bold">add</span>
-          </button>
-        </div>
-      </header>
+    <div className={`bg-gradient-to-b from-primary/20 to-white dark:bg-background-dark min-h-screen flex flex-col pb-12 transition-colors ${hideHeader ? 'min-h-0 bg-none pb-0' : ''}`}>
+      {!hideHeader && (
+        <header className="sticky top-0 z-50 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md transition-colors">
+          <div className="max-w-2xl mx-auto w-full flex items-center p-4">
+            <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
+              <span className="material-symbols-outlined text-gray-600 dark:text-white font-bold">arrow_back</span>
+            </button>
+            <h2 className="text-lg font-bold flex-1 text-center text-slate-900 dark:text-white">Planos de Assinatura</h2>
+            <button 
+              onClick={() => setIsCreating(true)}
+              className="size-10 rounded-full flex items-center justify-center bg-primary text-white shadow-lg shadow-primary/20 active:scale-95 transition-all"
+            >
+              <span className="material-symbols-outlined font-bold">add</span>
+            </button>
+          </div>
+        </header>
+      )}
 
       <main className="p-4 space-y-6 max-w-2xl mx-auto w-full">
-        {plans.map(plan => (
-          <div key={`${plan.id}-${JSON.stringify(plan.service_limits)}`} className="bg-white dark:bg-surface-dark p-6 rounded-3xl border border-gray-200 dark:border-white/5 shadow-sm space-y-4">
-            <div className="flex items-center gap-2 border-b border-gray-100 dark:border-white/5 pb-3">
-              <span className="material-symbols-outlined text-amber-500">card_membership</span>
-              <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-tight">{plan.name}</h3>
-            </div>
+        {loading ? (
+          <div className="flex justify-center py-20">
+            <div className="size-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        ) : (
+          <>
+            {hideHeader && (
+              <div className="flex justify-end mb-4">
+                <button 
+                  onClick={() => setIsCreating(true)}
+                  className="flex items-center gap-2 px-6 py-3 bg-amber-500 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-amber-500/20 active:scale-95 transition-all"
+                >
+                  <span className="material-symbols-outlined text-sm">add</span>
+                  Novo Plano
+                </button>
+              </div>
+            )}
 
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Valor Mensal (R$)</label>
-                  <input
-                    type="number"
-                    className="w-full bg-gray-50 dark:bg-black/20 p-3 rounded-xl border border-gray-200 dark:border-white/10 text-sm font-bold"
-                    defaultValue={plan.price}
-                    onBlur={(e) => handleUpdate(plan.id, Number(e.target.value), plan.qr_code_url || '', plan.pix_code || '', plan.service_limits || {})}
-                  />
+            {plans.length === 0 ? (
+              <div className="text-center py-20 px-6 bg-white dark:bg-surface-dark rounded-[2.5rem] border border-dashed border-gray-200 dark:border-white/10">
+                <div className="size-20 bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <span className="material-symbols-outlined text-4xl">card_membership</span>
                 </div>
+                <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight mb-2">Nenhum Plano Encontrado</h3>
+                <p className="text-gray-500 dark:text-gray-400 text-sm mb-8 leading-relaxed">Você ainda não criou nenhum plano de assinatura para o seu clube exclusivo.</p>
+                <button 
+                  onClick={() => setIsCreating(true)}
+                  className="px-8 py-4 bg-slate-900 dark:bg-white text-white dark:text-black rounded-2xl font-black uppercase text-xs tracking-widest shadow-2xl active:scale-95 transition-all"
+                >
+                  Criar Primeiro Plano
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {plans.map(plan => (
+                  <div key={`${plan.id}-${JSON.stringify(plan.service_limits)}`} className="bg-white dark:bg-surface-dark p-6 rounded-3xl border border-gray-200 dark:border-white/5 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between border-b border-gray-100 dark:border-white/5 pb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-amber-500">card_membership</span>
+                        <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-tight">{plan.name}</h3>
+                      </div>
+                      {confirmDeleteId === plan.id ? (
+                        <div className="flex items-center gap-2 animate-enter">
+                          <button 
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="px-3 py-1.5 text-[10px] font-black uppercase text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+                          >
+                            Cancelar
+                          </button>
+                          <button 
+                            onClick={() => handleDeletePlan(plan.id)}
+                            className="px-4 py-1.5 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-red-500/20 active:scale-95 transition-all flex items-center gap-1"
+                          >
+                            <span className="material-symbols-outlined text-xs">warning</span>
+                            Confirmar?
+                          </button>
+                        </div>
+                      ) : (
+                        <button 
+                          onClick={() => setConfirmDeleteId(plan.id)}
+                          className="size-8 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-500/10 active:scale-95 transition-all"
+                          title="Excluir Plano"
+                        >
+                          <span className="material-symbols-outlined text-xl">delete</span>
+                        </button>
+                      )}
+                    </div>
 
-                {/* Removed monthly_limit input as it is now per-service */}
+                    <div className="grid md:grid-cols-2 gap-6">
+                      <div className="space-y-4">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Valor Mensal (R$)</label>
+                          <input
+                            type="number"
+                            className="w-full bg-gray-50 dark:bg-black/20 p-3 rounded-xl border border-gray-200 dark:border-white/10 text-sm font-bold"
+                            defaultValue={plan.price}
+                            onBlur={(e) => handleUpdate(plan.id, Number(e.target.value), plan.qr_code_url || '', plan.pix_code || '', plan.service_limits || {})}
+                          />
+                        </div>
 
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Serviços Inclusos</label>
-                  <div className="grid grid-cols-1 gap-2 border border-gray-100 dark:border-white/5 p-3 rounded-2xl bg-gray-50/50 dark:bg-black/10">
-                    {(() => {
-                      const sorted = [...services].sort((a, b) => {
-                        const aChecked = plan.allowed_services?.includes(a.id);
-                        const bChecked = plan.allowed_services?.includes(b.id);
-                        if (aChecked && !bChecked) return -1;
-                        if (!aChecked && bChecked) return 1;
-                        return 0;
-                      });
-                      return sorted.map(s => {
-                        const isChecked = plan.allowed_services?.includes(s.id);
-                        const currentLimit = plan.service_limits?.[s.id] || 0;
-                        return (
-                          <div key={s.id} className="flex items-center justify-between gap-2 group">
-                            <label className="flex items-center gap-2 cursor-pointer flex-1">
-                              <input
-                                type="checkbox"
-                                className="accent-amber-500"
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  const newLimits = { ...(plan.service_limits || {}) };
-                                  if (e.target.checked) {
-                                    newLimits[s.id] = currentLimit || 1;
-                                  } else {
-                                    delete newLimits[s.id];
-                                  }
-                                  handleUpdate(plan.id, plan.price, plan.qr_code_url || '', plan.pix_code || '', newLimits);
-                                }}
-                              />
-                              <span className="text-xs font-medium text-slate-600 dark:text-gray-400 group-hover:text-amber-500 transition-colors">{s.name}</span>
-                            </label>
-                            {isChecked && (
-                              <div className="flex items-center gap-1 bg-white dark:bg-black/40 rounded-lg px-2 py-1 border border-gray-100 dark:border-white/5">
-                                <span className="text-[9px] font-bold text-gray-400 uppercase">Qtd:</span>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  className="w-16 bg-transparent text-xs font-black text-amber-600 focus:outline-none text-center"
-                                  value={localLimits[plan.id]?.[s.id] ?? currentLimit}
-                                  onChange={(e) => {
-                                    const val = parseInt(e.target.value) || 0;
-                                    setLocalLimits(prev => ({
-                                      ...prev,
-                                      [plan.id]: { ...(prev[plan.id] || {}), [s.id]: val }
-                                    }));
-                                  }}
-                                  onBlur={(e) => {
-                                    const val = parseInt(e.target.value) || 0;
-                                    const newLimits = { ...(plan.service_limits || {}), [s.id]: val };
-                                    handleUpdate(plan.id, plan.price, plan.qr_code_url || '', plan.pix_code || '', newLimits);
-                                  }}
-                                />
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Serviços Inclusos</label>
+                          <div className="grid grid-cols-1 gap-2 border border-gray-100 dark:border-white/5 p-3 rounded-2xl bg-gray-50/50 dark:bg-black/10">
+                            {(() => {
+                              const sorted = [...services].sort((a, b) => {
+                                const aChecked = plan.allowed_services?.includes(a.id);
+                                const bChecked = plan.allowed_services?.includes(b.id);
+                                if (aChecked && !bChecked) return -1;
+                                if (!aChecked && bChecked) return 1;
+                                return 0;
+                              });
+                              return sorted.map(s => {
+                                const isChecked = plan.allowed_services?.includes(s.id);
+                                const currentLimit = plan.service_limits?.[s.id] || 0;
+                                return (
+                                  <div key={s.id} className="flex items-center justify-between gap-2 group">
+                                    <label className="flex items-center gap-2 cursor-pointer flex-1">
+                                      <input
+                                        type="checkbox"
+                                        className="accent-amber-500"
+                                        checked={isChecked}
+                                        onChange={(e) => {
+                                          const newLimits = { ...(plan.service_limits || {}) };
+                                          if (e.target.checked) {
+                                            newLimits[s.id] = currentLimit || 1;
+                                          } else {
+                                            delete newLimits[s.id];
+                                          }
+                                          handleUpdate(plan.id, plan.price, plan.qr_code_url || '', plan.pix_code || '', newLimits);
+                                        }}
+                                      />
+                                      <span className="text-xs font-medium text-slate-600 dark:text-gray-400 group-hover:text-amber-500 transition-colors">{s.name}</span>
+                                    </label>
+                                    {isChecked && (
+                                      <div className="flex items-center gap-1 bg-white dark:bg-black/40 rounded-lg px-2 py-1 border border-gray-100 dark:border-white/5">
+                                        <span className="text-[9px] font-bold text-gray-400 uppercase">Qtd:</span>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          className="w-16 bg-transparent text-xs font-black text-amber-600 focus:outline-none text-center"
+                                          value={localLimits[plan.id]?.[s.id] ?? currentLimit}
+                                          onChange={(e) => {
+                                            const val = parseInt(e.target.value) || 0;
+                                            setLocalLimits(prev => ({
+                                              ...prev,
+                                              [plan.id]: { ...(prev[plan.id] || {}), [s.id]: val }
+                                            }));
+                                          }}
+                                          onBlur={(e) => {
+                                            const val = parseInt(e.target.value) || 0;
+                                            const newLimits = { ...(plan.service_limits || {}), [s.id]: val };
+                                            handleUpdate(plan.id, plan.price, plan.qr_code_url || '', plan.pix_code || '', newLimits);
+                                          }}
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              });
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Código Pix (Copia e Cola)</label>
+                          <textarea
+                            className="w-full bg-gray-50 dark:bg-black/20 p-3 rounded-xl border border-gray-200 dark:border-white/10 text-xs font-mono"
+                            rows={3}
+                            defaultValue={plan.pix_code}
+                            onBlur={(e) => handleUpdate(plan.id, plan.price, plan.qr_code_url || '', e.target.value, plan.service_limits || {})}
+                            placeholder="Cole aqui o código Pix Copia e Cola..."
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">QR Code (PIX)</label>
+                          <div className="flex items-center gap-4 bg-gray-50 dark:bg-black/20 p-3 rounded-xl border border-gray-200 dark:border-white/10">
+                            {plan.qr_code_url ? (
+                              <img src={plan.qr_code_url} className="size-16 rounded-lg object-cover border border-gray-200 dark:border-white/10 bg-white" alt="QR Preview" />
+                            ) : (
+                              <div className="size-16 rounded-lg bg-white dark:bg-black/20 flex items-center justify-center border border-gray-200 dark:border-white/10">
+                                <span className="material-symbols-outlined text-gray-400">qr_code_2</span>
                               </div>
                             )}
+                            <div className="relative flex-1">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => {
+                                      handleUpdate(plan.id, plan.price, reader.result as string, plan.pix_code || '', plan.service_limits || {});
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
+                                }}
+                              />
+                              <div className="w-full bg-white dark:bg-black/40 p-3 rounded-lg border border-dashed border-gray-300 dark:border-white/10 text-[10px] font-black text-gray-400 text-center hover:border-amber-500/50 transition-colors uppercase tracking-widest">
+                                ADICIONAR QR CODE
+                              </div>
+                            </div>
                           </div>
-                        );
-                      });
-                    })()}
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Código Pix (Copia e Cola)</label>
-                  <textarea
-                    className="w-full bg-gray-50 dark:bg-black/20 p-3 rounded-xl border border-gray-200 dark:border-white/10 text-xs font-mono"
-                    rows={3}
-                    defaultValue={plan.pix_code}
-                    onBlur={(e) => handleUpdate(plan.id, plan.price, plan.qr_code_url || '', e.target.value, plan.service_limits || {})}
-                    placeholder="Cole aqui o código Pix Copia e Cola..."
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">QR Code (PIX)</label>
-                  <div className="flex items-center gap-4 bg-gray-50 dark:bg-black/20 p-3 rounded-xl border border-gray-200 dark:border-white/10">
-                    {plan.qr_code_url ? (
-                      <img src={plan.qr_code_url} className="size-16 rounded-lg object-cover border border-gray-200 dark:border-white/10 bg-white" alt="QR Preview" />
-                    ) : (
-                      <div className="size-16 rounded-lg bg-white dark:bg-black/20 flex items-center justify-center border border-gray-200 dark:border-white/10">
-                        <span className="material-symbols-outlined text-gray-400">qr_code_2</span>
-                      </div>
-                    )}
-                    <div className="relative flex-1">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              handleUpdate(plan.id, plan.price, reader.result as string, plan.pix_code || '', plan.service_limits || {});
-                            };
-                            reader.readAsDataURL(file);
-                          }
-                        }}
-                      />
-                      <div className="w-full bg-white dark:bg-black/40 p-3 rounded-lg border border-dashed border-gray-300 dark:border-white/10 text-[10px] font-black text-gray-400 text-center hover:border-amber-500/50 transition-colors uppercase tracking-widest">
-                        ADICIONAR QR CODE
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                ))}
               </div>
-            </div>
-          </div>
-        ))}
+            )}
+          </>
+        )}
       </main>
 
       {isCreating && (
@@ -5420,6 +5729,69 @@ const AdminManagePlansScreen: React.FC<{
   );
 };
 
+const AdminClubManagementScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+  const [activeTab, setActiveTab] = useState<'MEMBERS' | 'PLANS'>('MEMBERS');
+
+  return (
+    <div className="bg-background-light dark:bg-background-dark min-h-screen flex flex-col transition-colors">
+      <header className="sticky top-0 z-50 border-b border-gray-200 dark:border-white/5 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md transition-colors">
+        <div className="max-w-4xl mx-auto w-full p-4">
+          <div className="flex items-center mb-6">
+            <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
+              <span className="material-symbols-outlined text-gray-600 dark:text-gray-400 font-bold">arrow_back</span>
+            </button>
+            <div className="flex-1 text-center pr-10">
+              <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Clube do Cabelo Perfeito</h2>
+              <p className="text-[10px] text-amber-500 font-black uppercase tracking-widest">Painel de Gestão Premium</p>
+            </div>
+          </div>
+
+          <div className="flex p-1 bg-gray-100 dark:bg-white/5 rounded-2xl max-w-sm mx-auto border border-gray-200 dark:border-white/5">
+            <button
+              onClick={() => setActiveTab('MEMBERS')}
+              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'MEMBERS' 
+                  ? 'bg-white dark:bg-surface-dark text-slate-900 dark:text-white shadow-sm' 
+                  : 'text-gray-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <span className="material-symbols-outlined text-sm">group</span>
+              Membros
+            </button>
+            <button
+              onClick={() => setActiveTab('PLANS')}
+              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'PLANS' 
+                  ? 'bg-white dark:bg-surface-dark text-slate-900 dark:text-white shadow-sm' 
+                  : 'text-gray-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <span className="material-symbols-outlined text-sm">settings_suggest</span>
+              Planos
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="flex-1">
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="h-full"
+        >
+          {activeTab === 'MEMBERS' ? (
+            <AdminSubscriptionsScreen onBack={onBack} hideHeader />
+          ) : (
+            <AdminManagePlansScreen onBack={onBack} hideHeader />
+          )}
+        </motion.div>
+      </main>
+    </div>
+  );
+};
+
 const SelectProfessionalScreen: React.FC<{
   booking: BookingState;
   setBooking: React.Dispatch<React.SetStateAction<BookingState>>;
@@ -5428,12 +5800,16 @@ const SelectProfessionalScreen: React.FC<{
   professionals: Professional[];
 }> = ({ booking, setBooking, onNext, onBack, professionals }) => {
   const filteredProfessionals = professionals.filter(p => {
-    // If no services selected, show all (shouldn't happen in flow)
-    if (booking.selectedServices.length === 0) return true;
+    // Se o profissional estiver inativo, já ignora
+    if (!p.isActive) return false;
     
-    // In a more complex scenario, we'd check if the professional performs ALL selected services
-    // For now, we show all active professionals as requested for "Adriana Coiffeur"
-    return p.isActive;
+    // Se a categoria foi selecionada e o profissional tem categorias cadastradas
+    if (booking.selectedCategory && p.categories && p.categories.length > 0) {
+      return p.categories.includes(String(booking.selectedCategory.id));
+    }
+    
+    // Fallback: se o profissional não tiver categorias, assume que atende tudo (para não quebrar a transição)
+    return true;
   });
 
   return (
@@ -5463,12 +5839,12 @@ const SelectProfessionalScreen: React.FC<{
                   booking.selectedProfessional?.id === p.id ? 'border-primary ring-2 ring-primary/20' : 'border-gray-100 dark:border-white/5'
                 }`}
               >
-                <div className="size-16 rounded-full overflow-hidden bg-gray-100 dark:bg-white/5 shrink-0 border-2 border-white/50 dark:border-white/10 shadow-sm">
+                <div className="size-16 rounded-full overflow-hidden bg-gray-100 dark:bg-white/5 shrink-0 border-2 border-white/50 dark:border-white/10 shadow-sm flex items-center justify-center">
                   {p.imageUrl ? (
                     <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-2xl font-black text-gray-400" style={{ color: p.color }}>
-                      {p.name.charAt(0)}
+                      {(p.name || '?').charAt(0)}
                     </div>
                   )}
                 </div>
@@ -5502,18 +5878,19 @@ const SelectProfessionalScreen: React.FC<{
   );
 };
 
-const AdminProfessionalsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+const AdminProfessionalsScreen: React.FC<{ onBack: () => void; categories?: Category[] }> = ({ onBack, categories = [] }) => {
   const [profs, setProfs] = useState<Professional[]>([]);
   const [editing, setEditing] = useState<Partial<Professional> | null>(null);
   const [loading, setLoading] = useState(false);
 
   const fetchProfs = async () => {
-    const { data } = await supabase.from('professionals').select('*').order('created_at', { ascending: true });
+    const { data } = await supabase.from('professionals').select('*, category_professionals(category_id)').order('created_at', { ascending: true });
     if (data) {
       setProfs(data.map((p: any) => ({
         ...p,
         imageUrl: p.image_url,
-        isActive: p.is_active
+        isActive: p.is_active,
+        categories: p.category_professionals?.map((cp: any) => String(cp.category_id))
       })));
     }
   };
@@ -5534,12 +5911,25 @@ const AdminProfessionalsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) 
     };
 
     let error;
+    let proId = editing.id;
     if (editing.id) {
       const { error: err } = await supabase.from('professionals').update(payload).eq('id', editing.id);
       error = err;
     } else {
-      const { error: err } = await supabase.from('professionals').insert(payload);
+      const { data, error: err } = await supabase.from('professionals').insert(payload).select().single();
+      if (data) proId = data.id;
       error = err;
+    }
+
+    if (!error && proId) {
+       // Delete old relations
+       await supabase.from('category_professionals').delete().eq('professional_id', proId);
+       
+       // Insert new relations
+       if (editing.categories && editing.categories.length > 0) {
+         const inserts = editing.categories.map(cid => ({ category_id: parseInt(cid), professional_id: proId }));
+         await supabase.from('category_professionals').insert(inserts);
+       }
     }
 
     setLoading(false);
@@ -5617,6 +6007,27 @@ const AdminProfessionalsScreen: React.FC<{ onBack: () => void }> = ({ onBack }) 
                 <div className="flex gap-2">
                   {['#7c3aed', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444'].map(c => (
                     <button key={c} onClick={() => setEditing({...editing, color: c})} className={`size-8 rounded-full transition-transform ${editing.color === c ? 'scale-125 ring-2 ring-offset-2 ring-primary dark:ring-offset-surface-dark' : 'hover:scale-110'}`} style={{ backgroundColor: c }} />
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-gray-400 px-1">Categorias de Atendimento</label>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  {categories.map(c => (
+                     <label key={c.id} className={`flex items-center gap-2 p-3 rounded-xl border cursor-pointer transition-colors ${editing.categories?.includes(String(c.id)) ? 'bg-primary/10 border-primary text-primary dark:bg-primary/20' : 'bg-gray-50 border-transparent text-gray-500 hover:bg-gray-100 dark:bg-black/20 dark:text-gray-400 dark:hover:bg-white/5'}`}>
+                        <input 
+                           type="checkbox" 
+                           className="hidden" 
+                           checked={editing.categories?.includes(String(c.id))} 
+                           onChange={(e) => {
+                             const cats = editing.categories || [];
+                             if (e.target.checked) setEditing({...editing, categories: [...cats, String(c.id)]});
+                             else setEditing({...editing, categories: cats.filter(id => id !== String(c.id))});
+                           }} 
+                        />
+                        <span className="material-symbols-outlined text-sm">{c.icon || 'category'}</span>
+                        <span className="text-xs font-bold truncate">{c.name}</span>
+                     </label>
                   ))}
                 </div>
               </div>
@@ -5811,9 +6222,80 @@ const ProductShowcaseScreen: React.FC<{ products: Product[]; onBack: () => void 
 
 // --- Main App Logic ---
 
+const ROUTES_MAP: Record<AppView, string> = {
+  LANDING: '/',
+  HOME: '/home',
+  SELECT_CATEGORY: '/agendar/categoria',
+  SELECT_SERVICES: '/agendar/servicos',
+  SELECT_PROFESSIONAL: '/agendar/profissional',
+  SELECT_DATE_TIME: '/agendar/data-hora',
+  CUSTOMER_INFO: '/cliente',
+  REVIEW: '/agendar/revisar',
+  MY_APPOINTMENTS: '/agendamentos',
+  LOGIN: '/login',
+  ADMIN_DASHBOARD: '/admin',
+  CHAT: '/chat',
+  ADMIN_SERVICES: '/admin/servicos',
+  ADMIN_CHAT_LIST: '/admin/chat',
+  ADMIN_BLOCK_SCHEDULE: '/admin/bloqueios',
+  ADMIN_SETTINGS: '/admin/configuracoes',
+  ADMIN_FINANCE: '/admin/financeiro',
+  ADMIN_TV: '/admin/tv',
+  SELECT_PLAN: '/assinaturas/planos',
+  SUBSCRIPTION_PAYMENT: '/assinaturas/pagamento',
+  ADMIN_PROFESSIONALS: '/admin/equipe',
+  ADMIN_PRODUCTS: '/admin/produtos',
+  PRODUCTS: '/produtos',
+  ADMIN_WEEKLY_SCHEDULE: '/admin/horarios',
+  CUSTOMER_LOGIN: '/entrar',
+  ADMIN_CLIENTS: '/admin/clientes',
+  ADMIN_CLUB: '/admin/clube'
+};
+
+// --- Protected Route Helper (Defined outside to prevent remounts) ---
+const ProtectedRoute = ({ 
+  children, 
+  authLoading, 
+  currentUserRole 
+}: { 
+  children: React.ReactNode;
+  authLoading: boolean;
+  currentUserRole: 'CUSTOMER' | 'BARBER';
+}) => {
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-background-dark flex items-center justify-center p-6">
+        <div className="flex flex-col items-center gap-4 animate-pulse">
+          <div className="size-16 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
+          <p className="text-gray-500 font-bold uppercase tracking-[0.2em] text-xs">Protegendo Painel...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  if (currentUserRole !== 'BARBER') {
+    return <Navigate to={ROUTES_MAP['LOGIN']} replace />;
+  }
+  
+  return <>{children}</>;
+};
+
 const App: React.FC = () => {
-  const [view, setView] = useState<AppView>('LANDING');
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Derive current view from URL for legacy conditions
+  const view = useMemo(() => {
+    const entry = Object.entries(ROUTES_MAP).find(([, v]) => v === location.pathname);
+    return (entry ? entry[0] : 'LANDING') as AppView;
+  }, [location.pathname]);
+
+  const setView = useCallback((v: AppView) => {
+    navigate(ROUTES_MAP[v] || '/');
+  }, [navigate]);
+
   const [currentUserRole, setCurrentUserRole] = useState<'CUSTOMER' | 'BARBER'>('CUSTOMER');
+  const [authLoading, setAuthLoading] = useState(true);
 
   // Notification refs
   const prevAppCountRef = useRef(0);
@@ -5837,36 +6319,40 @@ const App: React.FC = () => {
 
   // Check for persistent login
   useEffect(() => {
-    // Check local storage flag OR Supabase session
-    const isAuth = localStorage.getItem('admin_auth');
-
     const checkSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data.session || isAuth === 'true') {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
         setCurrentUserRole('BARBER');
-        // Restore last view or default to dashboard
+        // Restore last view OR if we are on landing/login, go to dashboard
         const lastView = localStorage.getItem('last_admin_view') as AppView;
-        if (lastView && lastView.startsWith('ADMIN_')) {
-          setView(lastView);
-        } else {
-          setView('ADMIN_DASHBOARD');
+        const currentPath = window.location.pathname;
+        
+        if (currentPath === '/' || currentPath === '/login') {
+          if (lastView && lastView.startsWith('ADMIN_')) {
+            setView(lastView);
+          } else {
+            setView('ADMIN_DASHBOARD');
+          }
         }
+      } else {
+        // No session found - clear any rogue flags
+        setCurrentUserRole('CUSTOMER');
+        localStorage.removeItem('admin_auth');
       }
+      setAuthLoading(false);
     };
     checkSession();
 
     // Listen for auth changes
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN') {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
         setCurrentUserRole('BARBER');
-        setView(prev => {
-          if (prev.startsWith('ADMIN_')) return prev;
-          const lastView = localStorage.getItem('last_admin_view') as AppView;
-          if (lastView && lastView.startsWith('ADMIN_')) return lastView;
-          return 'ADMIN_DASHBOARD';
-        });
+        localStorage.setItem('admin_auth', 'true');
       } else if (event === 'SIGNED_OUT') {
+        setCurrentUserRole('CUSTOMER');
         localStorage.removeItem('admin_auth');
+        localStorage.removeItem('last_admin_view');
         setView('LANDING');
       }
     });
@@ -5883,9 +6369,9 @@ const App: React.FC = () => {
     }
 
     return () => {
-      authListener.subscription.unsubscribe();
+      subscription.unsubscribe();
     };
-  }, []);
+  }, [setView]);
 
   // Request Notification Permission for Admin
   useEffect(() => {
@@ -5915,13 +6401,14 @@ const App: React.FC = () => {
 
 
   const fetchProfessionals = async () => {
-    const { data, error } = await supabase.from('professionals').select('*').eq('is_active', true).order('created_at', { ascending: true });
+    const { data, error } = await supabase.from('professionals').select('*, category_professionals(category_id)').eq('is_active', true).order('created_at', { ascending: true });
     if (error) console.error('Error fetching professionals:', error);
     if (data) {
       setProfessionals(data.map((p: any) => ({
         ...p,
         imageUrl: p.image_url,
-        isActive: p.is_active
+        isActive: p.is_active,
+        categories: p.category_professionals?.map((cp: any) => String(cp.category_id))
       })));
     }
   };
@@ -5944,7 +6431,14 @@ const App: React.FC = () => {
     fetchProfessionals();
     fetchAppointments();
     fetchProducts();
+    fetchBlockedSlots();
   }, [booking.customerPhone]);
+
+  const fetchBlockedSlots = async () => {
+    const { data, error } = await supabase.from('blocked_slots').select('*').order('date', { ascending: true }).order('time', { ascending: true });
+    if (error) console.error('Error fetching blocks:', error);
+    if (data) setBlockedSlots(data);
+  };
 
 
   const [selectedChatClient, setSelectedChatClient] = useState<{ id: string, name: string } | null>(null);
@@ -6023,6 +6517,7 @@ const App: React.FC = () => {
   const [showSuccess, setShowSuccess] = useState(false);
 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [blockedSlots, setBlockedSlots] = useState<any[]>([]);
   const [showPastHistory, setShowPastHistory] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -6417,208 +6912,156 @@ const App: React.FC = () => {
     }, 3000);
   };
 
-  const renderView = () => {
-    switch (view) {
-      case 'LANDING':
-        return <LandingScreen onStart={() => setView('HOME')} onAdmin={() => setView('LOGIN')} />;
-      case 'HOME':
-        return <HomeScreen
-          onAgendar={() => {
-            fetchCategories();
-            setView('SELECT_CATEGORY');
-          }}
-          onChat={() => { setCurrentUserRole('CUSTOMER'); setView('CHAT'); }}
-          onPerfil={() => {
-            setView('CUSTOMER_LOGIN');
-          }}
-          onMais={handleLogout}
-          onAssinatura={() => setView('SELECT_PLAN')}
-          onProducts={() => setView('PRODUCTS')}
-        />;
-      case 'SELECT_CATEGORY':
-        return <SelectCategoryScreen
-          categories={categories}
-          booking={booking}
-          setBooking={setBooking}
-          onNext={() => {
-            fetchServicesList();
-            setView('SELECT_SERVICES');
-          }}
-          onBack={() => setView('HOME')}
-        />;
-      case 'SELECT_SERVICES':
-        return <SelectServicesScreen
-          booking={booking}
-          setBooking={setBooking}
-          onNext={() => setView('SELECT_PROFESSIONAL')}
-          onBack={() => setView('SELECT_CATEGORY')}
-          services={services}
-        />;
-      case 'SELECT_PROFESSIONAL':
-        return <SelectProfessionalScreen
-          booking={booking}
-          setBooking={setBooking}
-          onNext={() => setView('SELECT_DATE_TIME')}
-          onBack={() => setView('SELECT_SERVICES')}
-          professionals={professionals}
-        />;
-      case 'SELECT_DATE_TIME':
-        return <SelectDateTimeScreen
-          booking={booking}
-          setBooking={setBooking}
-          onNext={() => setView('REVIEW')}
-          onBack={() => setView('SELECT_PROFESSIONAL')}
-        />;
-      case 'REVIEW':
-        return <ReviewScreen
-          booking={booking}
-          onConfirm={handleFinishBooking}
-          onBack={() => setView('SELECT_DATE_TIME')}
-        />;
-      case 'MY_APPOINTMENTS':
-        return <MyAppointmentsScreen
-          appointments={appointments}
-          showPastHistory={showPastHistory}
-          setShowPastHistory={setShowPastHistory}
-          onBack={() => setView('HOME')}
-          onNew={() => setView('SELECT_SERVICES')}
-          onRefresh={fetchAppointments}
-        />;
-      case 'LOGIN':
-        return <LoginScreen onLogin={() => { setCurrentUserRole('BARBER'); setView('ADMIN_DASHBOARD'); }} onBack={() => setView('LANDING')} />;
-      case 'ADMIN_DASHBOARD':
-        return <AdminDashboard
-          appointments={appointments}
-          showPastHistory={showPastHistory}
-          setShowPastHistory={setShowPastHistory}
-          onLogout={handleLogout}
-          onOpenChat={() => setView('ADMIN_CHAT')}
-          onManageServices={() => setView('ADMIN_SERVICES')}
-          onBlockSchedule={() => setView('ADMIN_BLOCK_SCHEDULE')}
-          onSettings={() => setView('ADMIN_SETTINGS')}
-          onWeeklySchedule={() => setView('ADMIN_WEEKLY_SCHEDULE')}
-          onFinance={() => setView('ADMIN_FINANCE')}
-          onTV={() => setView('ADMIN_TV')}
-          unreadCount={unreadCount}
-          onSubscriptions={() => setView('ADMIN_SUBSCRIPTIONS')}
-          onManagePlans={() => setView('ADMIN_MANAGE_PLANS')}
-          onManageProducts={() => setView('ADMIN_PRODUCTS')}
-          onRefresh={fetchAppointments}
-          onClients={() => setView('ADMIN_CLIENTS')}
-          onProfessionals={() => setView('ADMIN_PROFESSIONALS')}
-          setAppointments={setAppointments}
-          professionals={professionals}
-        />;
-      case 'ADMIN_PROFESSIONALS':
-        return <AdminProfessionalsScreen onBack={() => { fetchProfessionals(); setView('ADMIN_DASHBOARD'); }} />;
-      case 'ADMIN_SERVICES':
-        return <AdminServicesScreen onBack={() => setView('ADMIN_DASHBOARD')} />;
-      case 'ADMIN_BLOCK_SCHEDULE':
-        return <AdminBlockScheduleScreen onBack={() => setView('ADMIN_DASHBOARD')} />;
-      case 'ADMIN_SETTINGS':
-        return <AdminSettingsScreen onBack={() => setView('ADMIN_DASHBOARD')} />;
-      case 'ADMIN_WEEKLY_SCHEDULE':
-        return <AdminWeeklyScheduleScreen onBack={() => setView('ADMIN_DASHBOARD')} />;
-      case 'ADMIN_FINANCE':
-        return <AdminFinanceScreen onBack={() => setView('ADMIN_DASHBOARD')} />;
-      case 'ADMIN_TV':
-        return <AdminTVScreen appointments={appointments} onRefresh={fetchAppointments} onBack={() => setView('ADMIN_DASHBOARD')} />;
-      case 'ADMIN_PRODUCTS':
-        return <AdminProductsScreen onBack={() => setView('ADMIN_DASHBOARD')} />;
-      case 'PRODUCTS':
-        return <ProductShowcaseScreen products={products} onBack={() => setView('HOME')} />;
-      case 'ADMIN_CHAT_LIST':
-        return <AdminChatListScreen
-          onBack={() => setView('ADMIN_DASHBOARD')}
-          onSelectChat={(cId, cName) => {
-            setSelectedChatClient({ id: cId, name: cName });
-            setView('CHAT');
-          }}
-        />;
-      case 'CHAT':
-        return <ChatScreen
-          messages={chatMessages}
-          onSendMessage={handleSendMessage}
-          onRegister={handleRegisterIdentity}
-          currentUserRole={currentUserRole}
-          customerIdentity={{ name: booking.customerName, phone: booking.customerPhone }}
-          chatClientId={selectedChatClient?.id}
-          onBack={() => {
-            if (currentUserRole === 'BARBER') setView('ADMIN_CHAT_LIST');
-            else setView('HOME');
-          }}
-        />;
-      case 'CUSTOMER_LOGIN':
-        return <CustomerLoginScreen
-          onLogin={(phone) => {
-            localStorage.setItem('customer_phone', phone);
-            setBooking(prev => ({ ...prev, customerPhone: phone }));
-            setView('MY_APPOINTMENTS');
-            // fetchAppointments will be triggered by useEffect dependency on customerPhone
-          }}
-          onBack={() => setView('HOME')}
-        />;
-      case 'ADMIN_CLIENTS':
-        return <AdminClientsScreen
-          onBack={() => setView('ADMIN_DASHBOARD')}
-          onChat={(cId, cName) => {
-            setSelectedChatClient({ id: cId, name: cName });
-            setCurrentUserRole('BARBER');
-            setView('CHAT');
-          }}
-        />;
-      case 'ADMIN_SUBSCRIPTIONS':
-        return <AdminSubscriptionsScreen onBack={() => setView('ADMIN_DASHBOARD')} />;
-      case 'ADMIN_MANAGE_PLANS':
-        return <AdminManagePlansScreen onBack={() => setView('ADMIN_DASHBOARD')} />;
-      case 'SELECT_PLAN':
-        return <SelectPlanScreen
-          onBack={() => setView('HOME')}
-          onSelect={(p) => {
-            setBooking(prev => ({ ...prev, selectedPlan: p }));
-            setView('SUBSCRIPTION_PAYMENT');
-          }}
-        />;
-      case 'SUBSCRIPTION_PAYMENT':
-        return <SubscriptionPaymentScreen
-          plan={booking.selectedPlan!}
-          onBack={() => setView('SELECT_PLAN')}
-          onSubmit={async (proof, phone, name) => {
-            // Register/Find Client
-            let cId;
-            const normalizedPhone = phone.replace(/\D/g, '');
-            const { data: client } = await supabase.from('clients').select('id').eq('phone', normalizedPhone).single();
-            if (client) {
-              cId = client.id;
-              await supabase.from('clients').update({ name }).eq('id', cId);
-            } else {
-              const { data: newClient } = await supabase.from('clients').insert({ name, phone: normalizedPhone }).select().single();
-              if (newClient) cId = newClient.id;
-            }
-
-            if (!cId) {
-              alert('Erro ao processar dados do cliente.');
-              return;
-            }
-
-            const { error } = await supabase.from('user_subscriptions').insert({
-              client_id: cId,
-              plan_id: booking.selectedPlan!.id,
-              payment_proof_url: proof,
-              status: 'PENDING'
-            });
-
-            if (error) {
-              alert('Erro ao enviar assinatura: ' + error.message);
-            } else {
-              alert('Assinatura enviada com sucesso! Aguarde a aprovação do barbeiro.');
-              setView('HOME');
-            }
-          }}
-        />;
-      default:
-        return <LandingScreen onStart={() => setView('HOME')} onAdmin={() => setView('LOGIN')} />;
-    }
+  const renderRoutes = () => {
+    return (
+      <AnimatePresence mode="wait">
+        <Routes location={location}>
+          <Route path={ROUTES_MAP['LANDING']} element={
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+              <LandingScreen onStart={() => setView('HOME')} onAdmin={() => setView('LOGIN')} />
+            </motion.div>
+          } />
+          <Route path={ROUTES_MAP['HOME']} element={
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.3 }}>
+              <HomeScreen
+                onAgendar={() => { fetchCategories(); setView('SELECT_CATEGORY'); }}
+                onChat={() => { setCurrentUserRole('CUSTOMER'); setView('CHAT'); }}
+                onPerfil={() => setView('CUSTOMER_LOGIN')}
+                onMais={handleLogout}
+                onAssinatura={() => setView('SELECT_PLAN')}
+                onProducts={() => setView('PRODUCTS')}
+              />
+            </motion.div>
+          } />
+          <Route path={ROUTES_MAP['SELECT_CATEGORY']} element={
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }}>
+              <SelectCategoryScreen
+                categories={categories} booking={booking} setBooking={setBooking}
+                onNext={() => { fetchServicesList(); setView('SELECT_SERVICES'); }}
+                onBack={() => setView('HOME')}
+              />
+            </motion.div>
+          } />
+          <Route path={ROUTES_MAP['SELECT_SERVICES']} element={
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }}>
+              <SelectServicesScreen
+                booking={booking} setBooking={setBooking} onNext={() => setView('SELECT_PROFESSIONAL')}
+                onBack={() => setView('SELECT_CATEGORY')} services={services}
+              />
+            </motion.div>
+          } />
+          <Route path={ROUTES_MAP['SELECT_PROFESSIONAL']} element={
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }}>
+              <SelectProfessionalScreen
+                booking={booking} setBooking={setBooking} onNext={() => setView('SELECT_DATE_TIME')}
+                onBack={() => setView('SELECT_SERVICES')} professionals={professionals}
+              />
+            </motion.div>
+          } />
+          <Route path={ROUTES_MAP['SELECT_DATE_TIME']} element={
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }}>
+              <SelectDateTimeScreen
+                booking={booking} setBooking={setBooking} onNext={() => setView('CUSTOMER_INFO')}
+                onBack={() => setView('SELECT_PROFESSIONAL')}
+              />
+            </motion.div>
+          } />
+          <Route path={ROUTES_MAP['CUSTOMER_INFO']} element={
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }}>
+              <CustomerInfoScreen
+                booking={booking} setBooking={setBooking} onNext={() => setView('REVIEW')}
+                onBack={() => setView('SELECT_DATE_TIME')}
+              />
+            </motion.div>
+          } />
+          <Route path={ROUTES_MAP['REVIEW']} element={
+            <motion.div initial={{ opacity: 0, scale: 1.05 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.3 }}>
+              <ReviewScreen booking={booking} onConfirm={handleFinishBooking} onBack={() => setView('CUSTOMER_INFO')} />
+            </motion.div>
+          } />
+          <Route path={ROUTES_MAP['MY_APPOINTMENTS']} element={
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
+              <MyAppointmentsScreen
+                appointments={appointments} showPastHistory={showPastHistory} setShowPastHistory={setShowPastHistory}
+                onBack={() => setView('HOME')} onNew={() => setView('SELECT_SERVICES')} onRefresh={fetchAppointments}
+              />
+            </motion.div>
+          } />
+          <Route path={ROUTES_MAP['LOGIN']} element={
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.1 }} transition={{ duration: 0.4 }}>
+              <LoginScreen onLogin={() => { setCurrentUserRole('BARBER'); setView('ADMIN_DASHBOARD'); }} onBack={() => setView('LANDING')} />
+            </motion.div>
+          } />
+          <Route path={ROUTES_MAP['ADMIN_DASHBOARD']} element={
+            <ProtectedRoute authLoading={authLoading} currentUserRole={currentUserRole}>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+                <AdminDashboard
+                  appointments={appointments} showPastHistory={showPastHistory} setShowPastHistory={setShowPastHistory}
+                  onLogout={handleLogout} onOpenChat={() => setView('ADMIN_CHAT_LIST')} onManageServices={() => setView('ADMIN_SERVICES')}
+                  onBlockSchedule={() => setView('ADMIN_SETTINGS')} onSettings={() => setView('ADMIN_SETTINGS')}
+                  onWeeklySchedule={() => setView('ADMIN_SETTINGS')} onFinance={() => setView('ADMIN_FINANCE')}
+                  onTV={() => setView('ADMIN_TV')} unreadCount={unreadCount} onClubManagement={() => setView('ADMIN_CLUB')}
+                  onManageProducts={() => setView('ADMIN_PRODUCTS')}
+                  onRefresh={fetchAppointments} onClients={() => setView('ADMIN_CLIENTS')} onProfessionals={() => setView('ADMIN_PROFESSIONALS')}
+                  setAppointments={setAppointments} professionals={professionals} blockedSlots={blockedSlots}
+                />
+              </motion.div>
+            </ProtectedRoute>
+          } />
+          <Route path={ROUTES_MAP['ADMIN_PROFESSIONALS']} element={<ProtectedRoute authLoading={authLoading} currentUserRole={currentUserRole}><motion.div initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} transition={{ duration: 0.3 }}><AdminProfessionalsScreen onBack={() => { fetchProfessionals(); setView('ADMIN_DASHBOARD'); }} categories={categories} /></motion.div></ProtectedRoute>} />
+          <Route path={ROUTES_MAP['ADMIN_SERVICES']} element={<ProtectedRoute authLoading={authLoading} currentUserRole={currentUserRole}><motion.div initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} transition={{ duration: 0.3 }}><AdminServicesScreen onBack={() => setView('ADMIN_DASHBOARD')} /></motion.div></ProtectedRoute>} />
+          <Route path={ROUTES_MAP['ADMIN_SETTINGS']} element={<ProtectedRoute authLoading={authLoading} currentUserRole={currentUserRole}><motion.div initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} transition={{ duration: 0.3 }}><AdminSettingsScreen onBack={() => setView('ADMIN_DASHBOARD')} /></motion.div></ProtectedRoute>} />
+          <Route path={ROUTES_MAP['ADMIN_FINANCE']} element={<ProtectedRoute authLoading={authLoading} currentUserRole={currentUserRole}><motion.div initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} transition={{ duration: 0.3 }}><AdminFinanceScreen onBack={() => setView('ADMIN_DASHBOARD')} /></motion.div></ProtectedRoute>} />
+          <Route path={ROUTES_MAP['ADMIN_TV']} element={<ProtectedRoute authLoading={authLoading} currentUserRole={currentUserRole}><motion.div initial={{ opacity: 0, scale: 1.1 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.5 }}><AdminTVScreen appointments={appointments} onRefresh={fetchAppointments} onBack={() => setView('ADMIN_DASHBOARD')} /></motion.div></ProtectedRoute>} />
+          <Route path={ROUTES_MAP['ADMIN_PRODUCTS']} element={<ProtectedRoute authLoading={authLoading} currentUserRole={currentUserRole}><motion.div initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} transition={{ duration: 0.3 }}><AdminProductsScreen onBack={() => setView('ADMIN_DASHBOARD')} /></motion.div></ProtectedRoute>} />
+          <Route path={ROUTES_MAP['PRODUCTS']} element={<motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} transition={{ duration: 0.3 }}><ProductShowcaseScreen products={products} onBack={() => setView('HOME')} /></motion.div>} />
+          <Route path={ROUTES_MAP['ADMIN_CHAT_LIST']} element={
+            <ProtectedRoute authLoading={authLoading} currentUserRole={currentUserRole}>
+              <motion.div initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} transition={{ duration: 0.3 }}>
+                <AdminChatListScreen onBack={() => setView('ADMIN_DASHBOARD')} onSelectChat={(cId, cName) => { setSelectedChatClient({ id: cId, name: cName }); setView('CHAT'); }} />
+              </motion.div>
+            </ProtectedRoute>
+          } />
+          <Route path={ROUTES_MAP['CHAT']} element={
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} transition={{ duration: 0.3 }}>
+              <ChatScreen messages={chatMessages} onSendMessage={handleSendMessage} onRegister={handleRegisterIdentity} currentUserRole={currentUserRole} customerIdentity={{ name: booking.customerName, phone: booking.customerPhone }} chatClientId={selectedChatClient?.id} onBack={() => { if (currentUserRole === 'BARBER') setView('ADMIN_CHAT_LIST'); else setView('HOME'); }} />
+            </motion.div>
+          } />
+          <Route path={ROUTES_MAP['CUSTOMER_LOGIN']} element={
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.05 }} transition={{ duration: 0.3 }}>
+              <CustomerLoginScreen onLogin={(phone) => { localStorage.setItem('customer_phone', phone); setBooking(prev => ({ ...prev, customerPhone: phone })); setView('MY_APPOINTMENTS'); }} onBack={() => setView('HOME')} />
+            </motion.div>
+          } />
+          <Route path={ROUTES_MAP['ADMIN_CLUB']} element={<ProtectedRoute authLoading={authLoading} currentUserRole={currentUserRole}><motion.div initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} transition={{ duration: 0.3 }}><AdminClubManagementScreen onBack={() => setView('ADMIN_DASHBOARD')} /></motion.div></ProtectedRoute>} />
+          <Route path={ROUTES_MAP['ADMIN_CLIENTS']} element={
+            <ProtectedRoute authLoading={authLoading} currentUserRole={currentUserRole}>
+              <motion.div initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} transition={{ duration: 0.3 }}>
+                <AdminClientsScreen onBack={() => setView('ADMIN_DASHBOARD')} onChat={(id, name) => { setSelectedChatClient({ id, name }); setView('CHAT'); }} />
+              </motion.div>
+            </ProtectedRoute>
+          } />
+          <Route path={ROUTES_MAP['SELECT_PLAN']} element={
+            <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 30 }} transition={{ duration: 0.4 }}>
+              <SelectPlanScreen onBack={() => setView('HOME')} onSelect={(p) => { setBooking(prev => ({ ...prev, selectedPlan: p })); setView('SUBSCRIPTION_PAYMENT'); }} />
+            </motion.div>
+          } />
+          <Route path={ROUTES_MAP['SUBSCRIPTION_PAYMENT']} element={
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.1 }} transition={{ duration: 0.4 }}>
+              <SubscriptionPaymentScreen plan={booking.selectedPlan!} onBack={() => setView('SELECT_PLAN')} onSubmit={async (proof, phone, name) => {
+                let cId; const normalizedPhone = phone.replace(/\D/g, ''); const { data: client } = await supabase.from('clients').select('id').eq('phone', normalizedPhone).single();
+                if (client) { cId = client.id; await supabase.from('clients').update({ name }).eq('id', cId); } 
+                else { const { data: newClient } = await supabase.from('clients').insert({ name, phone: normalizedPhone }).select().single(); if (newClient) cId = newClient.id; }
+                if (!cId) { alert('Erro ao processar dados do cliente.'); return; }
+                const { error } = await supabase.from('user_subscriptions').insert({ client_id: cId, plan_id: booking.selectedPlan!.id, payment_proof_url: proof, status: 'PENDING' });
+                if (error) { alert('Erro ao enviar assinatura: ' + error.message); } 
+                else { alert('Assinatura enviada com sucesso! Aguarde a aprovação do barbeiro.'); setView('HOME'); }
+              }} />
+            </motion.div>
+          } />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AnimatePresence>
+    );
   };
 
   // Persist View State
@@ -6636,7 +7079,7 @@ const App: React.FC = () => {
         message={notificationState.message}
         onClose={() => setNotificationState(prev => ({ ...prev, visible: false }))}
       />
-      {renderView()}
+      {renderRoutes()}
       <ReloadPrompt />
     </div>
   );

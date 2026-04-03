@@ -135,7 +135,7 @@ async function sendReminder(app) {
     }
 
     const chatId = `${cleanPhone}@c.us`;
-    const message = `Olá, ${app.customerName?.name || 'Cliente'}! 👋\n\nPassando para lembrar do seu agendamento na *RS Barbearia* daqui a 1 hora, às *${app.appointment_time.slice(0, 5)}*.\n\nEstamos te esperando! ✂️💈`;
+    const message = `Olá, ${app.customerName?.name || 'Cliente'}! 👋\n\nPassando para lembrar do seu agendamento na *Adriana Coiffeur* daqui a 1 hora, às *${app.appointment_time.slice(0, 5)}*.\n\nEstamos te esperando! ✨💇‍♀️`;
 
     try {
         // Tenta resolver o ID correto do WhatsApp para evitar "No LID" error
