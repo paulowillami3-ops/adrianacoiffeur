@@ -72,6 +72,8 @@ export interface Professional {
   isActive: boolean;
   categories?: string[];
   created_at?: string;
+  authUserId?: string;
+  email?: string;
 }
 
 export interface Category {
@@ -98,6 +100,8 @@ export interface Service {
   name: string;
   description: string;
   price: number;
+  min_price?: number;
+  max_price?: number;
   duration: number;
   imageUrl: string;
   category_id?: string;
@@ -113,6 +117,7 @@ export interface Appointment {
   date: string; // ISO string or simple YYYY-MM-DD
   time: string; // HH:mm
   totalPrice: number;
+  finalPriceSet?: boolean; // true when admin explicitly defined a final price for price-range services
   status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
   client_id?: number;
   professionalId?: string;
