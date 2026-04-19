@@ -248,10 +248,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   return (
     <div className="bg-slate-50 dark:bg-background-dark min-h-screen pb-12 transition-colors">
       {/* Header */}
-      <header className="p-6 bg-white dark:bg-surface-dark border-b border-gray-100 dark:border-white/5 sticky top-0 z-40 transition-colors">
-        <div className="flex items-center justify-between max-w-7xl mx-auto gap-4">
+      <header className="p-4 md:p-6 bg-white dark:bg-surface-dark border-b border-gray-100 dark:border-white/5 sticky top-0 z-40 transition-colors">
+        <div className="flex flex-wrap items-center justify-between max-w-7xl mx-auto gap-4">
           {/* Left: Greeting */}
-          <div className="min-w-0">
+          <div className="min-w-0 flex-[1_1_100%] md:flex-[1_1_auto] order-1">
             <h1 className="text-2xl font-black text-slate-900 dark:text-white">
               {greeting}, <span className="text-primary">{adminName}!</span>
             </h1>
@@ -261,7 +261,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           {/* Center: Live Clock */}
-          <div className="flex-1 flex flex-col items-center select-none">
+          <div className="flex flex-col items-start md:items-center select-none order-2">
             <span className="text-3xl font-black text-slate-800 dark:text-white tabular-nums leading-none">
               {format(now, 'HH:mm')}
             </span>
@@ -271,20 +271,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           {/* Right: Actions */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleRefresh}
-              className={`size-14 rounded-2xl bg-slate-50 dark:bg-white/5 flex items-center justify-center text-slate-400 hover:text-primary transition-all active:scale-95 ${isRefreshing ? 'animate-spin text-primary' : ''}`}
-              title="Recarregar"
-            >
-              <span className="material-symbols-outlined text-[28px]">refresh</span>
-            </button>
+          <div className="flex items-center gap-2 order-3">
             <button
               onClick={onLogout}
-              className="size-14 rounded-2xl bg-red-50 dark:bg-red-500/10 flex items-center justify-center text-red-500 hover:bg-red-500 hover:text-white transition-all active:scale-95"
+              className="size-12 md:size-14 rounded-2xl bg-red-50 dark:bg-red-500/10 flex items-center justify-center text-red-500 hover:bg-red-500 hover:text-white transition-all active:scale-95"
               title="Sair do Painel"
             >
-              <span className="material-symbols-outlined text-[28px]">logout</span>
+              <span className="material-symbols-outlined text-[24px] md:text-[28px]">logout</span>
             </button>
           </div>
         </div>
@@ -362,21 +355,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                 {/* CRONOGRAMA DE HOJE (The Missing Cards) */}
                 <div className="space-y-6">
-                  <div className="flex items-center justify-between px-1">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Cronograma do Dia</h3>
+                  <div className="flex flex-col md:flex-row md:items-center justify-between px-1 gap-4">
+                    <div className="flex items-center justify-between w-full md:w-auto gap-3">
+                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] shrink-0">Cronograma do Dia</h3>
                       <button 
                         onClick={() => setShowCompleted(!showCompleted)}
-                        className={`text-[9px] font-black uppercase px-3 py-1 rounded-full border transition-all ${
+                        className={`text-[8px] sm:text-[9px] font-black uppercase px-2 sm:px-3 py-1.5 rounded-full border transition-all shrink-0 ${
                           showCompleted 
-                            ? 'bg-primary text-white border-primary' 
+                            ? 'bg-primary text-white border-primary shadow-sm' 
                             : 'bg-white dark:bg-surface-dark text-slate-400 border-slate-200 dark:border-white/10'
                         }`}
                       >
                         {showCompleted ? 'Ocultar Concluídos' : 'Mostrar Concluídos'}
                       </button>
                     </div>
-                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-[200px] md:max-w-none">
+                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar w-full md:w-auto pb-1">
                       {nextDays.slice(0, 7).map((day, i) => (
                         <button
                           key={i}
@@ -401,32 +394,32 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     ) : (
                           pendingApps.map((app) => (
-                            <div key={app.id} className="bg-white dark:bg-surface-dark p-6 rounded-[32px] border border-slate-200 dark:border-white/10 shadow-sm hover:shadow-md transition-all">
-                              <div className="flex justify-between items-start mb-4">
-                                <div className="flex gap-4">
-                                  <div className="flex flex-col items-center justify-center size-14 bg-slate-50 dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/5 shadow-inner">
-                                    <span className="text-lg font-black text-slate-900 dark:text-white leading-none">{app.time}</span>
-                                    <span className="text-[8px] font-bold text-slate-400 uppercase mt-1">
+                            <div key={app.id} className="bg-white dark:bg-surface-dark p-4 md:p-6 rounded-[28px] md:rounded-[32px] border border-slate-200 dark:border-white/10 shadow-sm hover:shadow-md transition-all">
+                              <div className="flex justify-between items-start mb-4 gap-2">
+                                <div className="flex gap-3 md:gap-4 min-w-0 flex-1">
+                                  <div className="flex flex-col items-center justify-center size-12 md:size-14 shrink-0 bg-slate-50 dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/5 shadow-inner">
+                                    <span className="text-base md:text-lg font-black text-slate-900 dark:text-white leading-none">{app.time}</span>
+                                    <span className="text-[7px] md:text-[8px] font-bold text-slate-400 uppercase mt-1">
                                       {app.services.reduce((total, s) => total + (s.duration || 30), 0)} min
                                     </span>
                                   </div>
-                                  <div>
-                                    <span className="text-[10px] font-black text-primary uppercase tracking-widest mb-0.5 block">
+                                  <div className="min-w-0 pr-1">
+                                    <span className="text-[9px] md:text-[10px] font-black text-primary uppercase tracking-widest mb-0.5 block truncate">
                                       {app.services.map(s => s.name).join(' + ') || 'Serviço não especificado'}
                                     </span>
-                                    <h4 className="font-black text-lg text-slate-800 dark:text-white leading-tight mb-1">{app.customerName}</h4>
+                                    <h4 className="font-black text-base md:text-lg text-slate-800 dark:text-white leading-tight mb-1 truncate">{app.customerName}</h4>
                                     
-                                    <div className="flex items-center gap-2 mt-2">
+                                    <div className="flex flex-wrap items-center gap-1 md:gap-2 mt-1">
                                       {(() => {
                                         const pro = professionals.find(p => p.id === app.professionalId);
                                         if (!pro) return null;
                                         return (
-                                          <span className="text-[9px] font-black px-2 py-0.5 rounded-full border uppercase tracking-tighter" style={{ backgroundColor: `${pro.color}15`, color: pro.color, borderColor: `${pro.color}30` }}>
+                                          <span className="text-[8px] md:text-[9px] font-black px-1.5 md:px-2 py-0.5 rounded-full border uppercase tracking-tighter shrink-0" style={{ backgroundColor: `${pro.color}15`, color: pro.color, borderColor: `${pro.color}30` }}>
                                             {pro.name}
                                           </span>
                                         );
                                       })()}
-                                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter border ${
+                                      <span className={`text-[8px] md:text-[9px] font-black px-1.5 md:px-2 py-0.5 rounded-full uppercase tracking-tighter border shrink-0 ${
                                         app.status === 'CONFIRMED' ? 'bg-blue-50 text-blue-500 border-blue-200' : 'bg-orange-50 text-orange-500 border-orange-200'
                                       }`}>
                                         {app.status === 'PENDING' ? 'Pendente' : 'Confirmado'}
@@ -434,19 +427,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     </div>
                                   </div>
                                 </div>
-                                <div className="text-right flex flex-col items-end gap-1">
-                                  <p className="text-xs text-slate-400 font-bold uppercase mb-0.5">Valor</p>
+                                <div className="text-right flex flex-col items-end gap-1 shrink-0 ml-1">
+                                  <p className="text-[9px] md:text-xs text-slate-400 font-bold uppercase mb-0.5 whitespace-nowrap">Valor</p>
                                   {editingPriceId === app.id ? (
                                     <input
                                       type="number"
                                       value={tempPrice}
                                       autoFocus
                                       onChange={(e) => setTempPrice(e.target.value)}
-                                      className="w-24 text-right bg-slate-50 dark:bg-white/5 border border-primary/30 rounded-lg px-2 py-1 text-sm font-black text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary/20"
+                                      className="w-20 md:w-24 text-right bg-slate-50 dark:bg-white/5 border border-primary/30 rounded-lg px-2 py-1 text-xs md:text-sm font-black text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary/20"
                                       placeholder="0,00"
                                     />
                                   ) : (
-                                    <p className="text-xl font-black text-slate-900 dark:text-white">R$ {(Number(app.totalPrice) || 0).toFixed(2).replace('.',',')}</p>
+                                    <p className="text-base md:text-xl font-black text-slate-900 dark:text-white whitespace-nowrap">R$ {(Number(app.totalPrice) || 0).toFixed(2).replace('.',',')}</p>
                                   )}
                                   {hasEvaluationService(app.services) && !editingPriceId && (
                                     app.finalPriceSet ? (
