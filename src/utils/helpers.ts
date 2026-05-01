@@ -31,3 +31,8 @@ export const getNextDays = (count: number) => {
   }
   return days;
 };
+
+export const formatDateToBRL = (dateStr: string) => {
+  const [year, month, day] = dateStr.split('-');
+  return `${day}/${month}/${year}`;
+};

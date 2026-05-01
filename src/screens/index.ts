@@ -25,3 +25,4 @@ export { default as SelectCategoryScreen } from './SelectCategoryScreen';
 export { default as SelectDateTimeScreen } from './SelectDateTimeScreen';
 export { default as ReviewScreen } from './ReviewScreen';
 export { default as CustomerLoginScreen } from './CustomerLoginScreen';
+export { default as ClubLoginScreen } from './ClubLoginScreen';

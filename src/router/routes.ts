@@ -28,4 +28,5 @@ export const ROUTES_MAP: Record<AppView, string> = {
   CUSTOMER_LOGIN: '/entrar',
   ADMIN_CLIENTS: '/admin/clientes',
   ADMIN_CLUB: '/admin/clube',
+  CLUB_LOGIN: '/clube/login',
 };

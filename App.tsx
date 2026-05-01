@@ -34,7 +34,8 @@ import {
   AdminManagePlansScreen,
   ProductShowcaseScreen,
   LandingScreen,
-  SubscriptionPaymentScreen
+  SubscriptionPaymentScreen,
+  ClubLoginScreen
 } from './src/screens';
 
 // --- Global Route Configuration ---
@@ -65,7 +66,8 @@ const ROUTES_MAP: Record<AppView, string> = {
   ADMIN_WEEKLY_SCHEDULE: '/admin/horarios',
   CUSTOMER_LOGIN: '/entrar',
   ADMIN_CLIENTS: '/admin/clientes',
-  ADMIN_CLUB: '/admin/clube'
+  ADMIN_CLUB: '/admin/clube',
+  CLUB_LOGIN: '/clube/login'
 };
 
 const App: React.FC = () => {
@@ -160,7 +162,7 @@ const App: React.FC = () => {
   }, []);
 
   const fetchServicesList = useCallback(async () => {
-    const { data } = await supabase.from('services').select('*').order('display_order', { ascending: true });
+    const { data } = await supabase.from('services').select('*').eq('is_active', true).order('display_order', { ascending: true });
     if (data) setServices(data.map((s: any) => ({ ...s, id: String(s.id), imageUrl: s.image_url })));
   }, []);
 
@@ -186,7 +188,15 @@ const App: React.FC = () => {
     const today = format(new Date(), 'yyyy-MM-dd');
     const limitDate = showPastHistory ? format(addDays(new Date(), -30), 'yyyy-MM-dd') : today;
 
-    let query = supabase.from('appointments').select(`*, services:appointment_services(service:services(*)), clients${currentUserRole === 'CUSTOMER' ? '!inner' : ''}(id, name, phone, user_subscriptions(*, subscription_plans(*)))`).order('appointment_date', { ascending: true }).order('appointment_time', { ascending: true });
+    let query = supabase
+      .from('appointments')
+      .select(`
+        *,
+        services:appointment_services(service:services(id, name, price, duration, image_url)),
+        clients (id, name, phone, user_subscriptions(status, subscription_plans(name)))
+      `)
+      .order('appointment_date', { ascending: true })
+      .order('appointment_time', { ascending: true });
 
     if (currentUserRole === 'CUSTOMER') {
       query = query.eq('clients.phone', normalizedPhone);
@@ -200,6 +210,7 @@ const App: React.FC = () => {
     if (data) {
       const mapped = data.map((a: any) => {
         const client = a.clients;
+        // Optimization: already joined, just find APPROVED status
         const activeSub = client?.user_subscriptions?.find((s: any) => s.status === 'APPROVED');
         return {
           id: String(a.id),
@@ -214,7 +225,7 @@ const App: React.FC = () => {
             ? a.services.map((s: any) => s.service ? ({ ...s.service, imageUrl: s.service.image_url || null }) : null).filter(Boolean)
             : [{ name: 'Serviço não especificado', duration: 30, price: 0 }],
           professionalId: a.professional_id,
-          clientSubscription: activeSub ? { planName: activeSub.subscription_plans.name, isActive: true } : undefined
+          clientSubscription: activeSub ? { planName: activeSub.subscription_plans?.name, isActive: true } : undefined
         };
       });
 
@@ -272,6 +283,80 @@ const App: React.FC = () => {
     setView('LANDING');
   }, [setView]);
 
+  const handleClubLogin = async (phone: string) => {
+    const normalizedPhone = phone.replace(/\D/g, '');
+    const { data: client } = await supabase.from('clients').select('id, name, phone').eq('phone', normalizedPhone).single();
+    
+    if (!client) {
+      alert('Número não encontrado. Assine um plano primeiro!');
+      setView('SELECT_PLAN');
+      return;
+    }
+
+    const { data: subs } = await supabase
+      .from('user_subscriptions')
+      .select('*, subscription_plans(*)')
+      .eq('client_id', client.id)
+      .eq('status', 'APPROVED');
+      
+    if (!subs || subs.length === 0) {
+      alert('Nenhuma assinatura ativa encontrada para este número.');
+      setView('SELECT_PLAN');
+      return;
+    }
+
+    const activeSub = subs[0];
+    const plan = activeSub.subscription_plans;
+
+    // Fetch plan services
+    const { data: ps } = await supabase
+      .from('plan_services')
+      .select('service_id, monthly_limit')
+      .eq('plan_id', plan.id);
+
+    const allowedServices = ps?.map(s => String(s.service_id)) || [];
+    const serviceLimits: Record<string, number> = {};
+    ps?.forEach(s => { serviceLimits[String(s.service_id)] = Number(s.monthly_limit); });
+
+    // Fetch current month usage
+    const now = new Date();
+    const startOfMonth = format(now, 'yyyy-MM-01');
+    const { data: monthApps } = await supabase
+      .from('appointments')
+      .select('id, services:appointment_services(service_id)')
+      .eq('client_id', client.id)
+      .gte('appointment_date', startOfMonth)
+      .in('status', ['COMPLETED', 'PENDING']);
+
+    const usage: Record<string, number> = {};
+    monthApps?.forEach(app => {
+      const appServices = app.services || [];
+      appServices.forEach((s: any) => {
+        const sId = String(s.service_id);
+        usage[sId] = (usage[sId] || 0) + 1;
+      });
+    });
+    
+    setBooking(prev => ({
+      ...prev,
+      customerPhone: client.phone,
+      customerName: client.name,
+      clientSubscription: {
+        planName: plan.name,
+        isActive: true,
+        allowedServices,
+        serviceLimits,
+        serviceUsage: usage
+      }
+    }));
+    
+    localStorage.setItem('customer_phone', client.phone);
+    localStorage.setItem('customer_name', client.name);
+    
+    alert(`Bem-vindo ao Clube VIP, ${client.name}!`);
+    setView('SELECT_SERVICES');
+  };
+
   const [selectedChatClient, setSelectedChatClient] = useState<{ id: string, name: string } | null>(null);
 
   const handleSendMessage = async (text: string, identity?: { name: string, phone: string }) => {
@@ -306,8 +391,26 @@ const App: React.FC = () => {
 
     if (!cId) return alert('Ambiente offline ou erro ao processar cliente');
 
+    const sub = booking.clientSubscription;
+    const limits = sub?.serviceLimits || {};
+    const usage = { ...(sub?.serviceUsage || {}) };
+    
     const totalPrice = booking.selectedServices.reduce((sum, s) => {
-      const basePrice = (s.min_price !== undefined && s.min_price !== null) ? s.min_price : s.price;
+      if (sub?.isActive) {
+        const limit = limits[s.id];
+        if (limit !== undefined && limit > 0) {
+          const used = usage[s.id] || 0;
+          if (used < limit) {
+            usage[s.id] = used + 1;
+            return sum;
+          }
+        }
+        // If it's a club only service and it's free for members (missing price)
+        if (s.is_club_only && (!s.price || s.price === 0)) {
+          return sum;
+        }
+      }
+      const basePrice = (s.min_price !== undefined && s.min_price !== null) ? s.min_price : (s.price || 0);
       return sum + basePrice;
     }, 0);
 
@@ -317,7 +420,8 @@ const App: React.FC = () => {
       appointment_date: booking.selectedDate,
       appointment_time: booking.selectedTime,
       total_price: totalPrice,
-      status: 'PENDING'
+      status: 'PENDING',
+      is_vip: booking.clientSubscription?.isActive || false
     }).select().single();
 
     if (!error && newApp) {
@@ -358,9 +462,9 @@ const App: React.FC = () => {
         <Routes location={location}>
           {/* Public & Customer Routes */}
           <Route path={ROUTES_MAP.LANDING} element={<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}><LandingScreen onStart={() => setView('HOME')} onAdmin={() => setView('LOGIN')} /></motion.div>} />
-          <Route path={ROUTES_MAP.HOME} element={<motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.3 }}><HomeScreen onAgendar={() => { fetchCategories(); setView('SELECT_CATEGORY'); }} onChat={() => setView('CHAT')} onPerfil={() => setView('CUSTOMER_LOGIN')} onMais={handleLogout} onAssinatura={() => setView('SELECT_PLAN')} onProducts={() => setView('PRODUCTS')} /></motion.div>} />
+          <Route path={ROUTES_MAP.HOME} element={<motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.3 }}><HomeScreen onAgendar={() => { fetchCategories(); setView('SELECT_CATEGORY'); }} onChat={() => setView('CHAT')} onPerfil={() => setView('CUSTOMER_LOGIN')} onMais={handleLogout} onAssinatura={() => setView('CLUB_LOGIN')} onProducts={() => setView('PRODUCTS')} /></motion.div>} />
           <Route path={ROUTES_MAP.SELECT_CATEGORY} element={<motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }}><SelectCategoryScreen categories={categories} booking={booking} setBooking={setBooking} onNext={() => { fetchServicesList(); setView('SELECT_SERVICES'); }} onBack={() => setView('HOME')} /></motion.div>} />
-          <Route path={ROUTES_MAP.SELECT_SERVICES} element={<motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }}><SelectServicesScreen booking={booking} setBooking={setBooking} onNext={() => setView('SELECT_PROFESSIONAL')} onBack={() => setView('SELECT_CATEGORY')} services={services} /></motion.div>} />
+          <Route path={ROUTES_MAP.SELECT_SERVICES} element={<motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }}><SelectServicesScreen booking={booking} setBooking={setBooking} onNext={() => setView('SELECT_PROFESSIONAL')} onBack={() => setView(booking.clientSubscription?.isActive ? 'HOME' : 'SELECT_CATEGORY')} services={services} /></motion.div>} />
           <Route path={ROUTES_MAP.SELECT_PROFESSIONAL} element={<motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }}><SelectProfessionalScreen booking={booking} setBooking={setBooking} onNext={() => setView('SELECT_DATE_TIME')} onBack={() => setView('SELECT_SERVICES')} professionals={professionals} /></motion.div>} />
           <Route path={ROUTES_MAP.SELECT_DATE_TIME} element={<motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }}><SelectDateTimeScreen booking={booking} setBooking={setBooking} onNext={() => setView('CUSTOMER_INFO')} onBack={() => setView('SELECT_PROFESSIONAL')} /></motion.div>} />
           <Route path={ROUTES_MAP.CUSTOMER_INFO} element={<motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }}><CustomerInfoScreen booking={booking} setBooking={setBooking} onNext={() => setView('REVIEW')} onBack={() => setView('SELECT_DATE_TIME')} /></motion.div>} />
@@ -370,11 +474,42 @@ const App: React.FC = () => {
           <Route path={ROUTES_MAP.CHAT} element={<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} transition={{ duration: 0.3 }}><ChatScreen messages={chatMessages} onSendMessage={handleSendMessage} onRegister={identity => setBooking(prev => ({ ...prev, ...identity }))} currentUserRole={currentUserRole} customerIdentity={{ name: booking.customerName, phone: booking.customerPhone }} chatClientId={selectedChatClient?.id} onBack={() => setView(currentUserRole === 'BARBER' ? 'ADMIN_CHAT_LIST' : 'HOME')} /></motion.div>} />
           <Route path={ROUTES_MAP.CUSTOMER_LOGIN} element={<motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.05 }} transition={{ duration: 0.3 }}><CustomerLoginScreen onLogin={p => { localStorage.setItem('customer_phone', p); setBooking(prev => ({ ...prev, customerPhone: p })); setView('MY_APPOINTMENTS'); }} onBack={() => setView('HOME')} /></motion.div>} />
           <Route path={ROUTES_MAP.SELECT_PLAN} element={<motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 30 }} transition={{ duration: 0.4 }}><SelectPlanScreen onBack={() => setView('HOME')} onSelect={p => { setBooking(prev => ({ ...prev, selectedPlan: p })); setView('SUBSCRIPTION_PAYMENT'); }} /></motion.div>} />
-          <Route path={ROUTES_MAP.SUBSCRIPTION_PAYMENT} element={<motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.1 }} transition={{ duration: 0.4 }}><SubscriptionPaymentScreen plan={booking.selectedPlan!} onBack={() => setView('SELECT_PLAN')} onSubmit={async (proof, phone, name) => {
-              const p = phone.replace(/\D/g, ''); const { data: client } = await supabase.from('clients').select('id').eq('phone', p).single();
-              let cid = client?.id; if (client) await supabase.from('clients').update({ name }).eq('id', cid); else { const { data: nc } = await supabase.from('clients').insert({ name, phone: p }).select().single(); cid = nc?.id; }
-              if (cid) { const { error } = await supabase.from('user_subscriptions').insert({ client_id: cid, plan_id: booking.selectedPlan!.id, payment_proof_url: proof, status: 'PENDING' }); if (!error) { alert('Sucesso! Aguarde aprovação.'); setView('HOME'); } }
+          <Route path={ROUTES_MAP.SUBSCRIPTION_PAYMENT} element={<motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.1 }} transition={{ duration: 0.4 }}><SubscriptionPaymentScreen plan={booking.selectedPlan!} onBack={() => setView('SELECT_PLAN')} onSubmit={async (proof, phone, name, birthDate, cpf, paymentMethod) => {
+              const p = phone.replace(/\D/g, ''); 
+              const { data: client } = await supabase.from('clients').select('id').eq('phone', p).single();
+              let cid = client?.id; 
+              
+              const clientData = { 
+                name, 
+                phone: p, 
+                birth_date: birthDate, 
+                notes: cpf ? `CPF: ${cpf}` : undefined 
+              };
+
+              if (client) {
+                await supabase.from('clients').update(clientData).eq('id', cid); 
+              } else { 
+                const { data: nc } = await supabase.from('clients').insert(clientData).select().single(); 
+                cid = nc?.id; 
+              }
+
+              const { error } = await supabase.from('user_subscriptions').insert({
+                client_id: cid,
+                plan_id: booking.selectedPlan!.id,
+                status: 'PENDING',
+                payment_proof_url: proof,
+                payment_method: paymentMethod
+              });
+
+              if (error) {
+                setNotificationState({ visible: true, message: 'Erro ao enviar cadastro: ' + error.message });
+              } else {
+                setNotificationState({ visible: true, message: 'Cadastro enviado! Aguarde a aprovação.' });
+                setView('HOME');
+              }
             }} /></motion.div>} />
+          
+          <Route path={ROUTES_MAP.CLUB_LOGIN} element={<motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.05 }} transition={{ duration: 0.3 }}><ClubLoginScreen onLogin={handleClubLogin} onBack={() => setView('HOME')} /></motion.div>} />
           
           {/* Admin Routes */}
           <Route path={ROUTES_MAP.LOGIN} element={<LoginScreen onLogin={() => setView('ADMIN_DASHBOARD')} onBack={() => setView('LANDING')} />} />

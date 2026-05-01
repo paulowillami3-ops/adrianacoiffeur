@@ -5,36 +5,26 @@ import { AnimatePresence, motion } from 'framer-motion';
 interface SelectPlanScreenProps {
   onBack: () => void;
   clientId: string;
+  onSelect: (plan: any) => void;
 }
 
-const SelectPlanScreen: React.FC<SelectPlanScreenProps> = ({ onBack, clientId }) => {
+const SelectPlanScreen: React.FC<SelectPlanScreenProps> = ({ onBack, clientId, onSelect }) => {
   const [plans, setPlans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
 
   const loadPlans = async () => {
     setLoading(true);
-    const { data } = await supabase.from('subscription_plans').select('*').eq('is_active', true);
+    const { data } = await supabase.from('subscription_plans').select('*').eq('is_active', true).order('display_order', { ascending: true });
     if (data) setPlans(data);
     setLoading(false);
   };
 
   useEffect(() => { loadPlans(); }, []);
 
-  const handleSubscribe = async (planId: string) => {
-    if (!confirm('Deseja assinar este plano?')) return;
-    
-    const { error } = await supabase.from('user_subscriptions').insert({
-      user_id: clientId,
-      plan_id: planId,
-      status: 'PENDING'
-    });
-
-    if (error) alert('Erro: ' + error.message);
-    else {
-      alert('Solicitação enviada! Aguarde a aprovação no salão.');
-      onBack();
-    }
+  const handleSubscribe = (planId: string) => {
+    const plan = plans.find(p => p.id === planId);
+    if (plan) onSelect(plan);
   };
 
   return (
@@ -70,9 +60,24 @@ const SelectPlanScreen: React.FC<SelectPlanScreenProps> = ({ onBack, clientId })
                 )}
                 
                 <h4 className="text-2xl font-black text-slate-900 dark:text-white mb-2">{plan.name}</h4>
-                <div className="flex items-baseline gap-1 mb-6">
-                  <span className="text-primary font-black text-3xl">R$ {plan.price.toFixed(2)}</span>
-                  <span className="text-gray-400 text-xs font-bold uppercase">/ mês</span>
+                <div className="flex flex-col mb-6">
+                  {plan.price_on_evaluation ? (
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-green-500 font-black text-3xl">{plan.discount_percentage}% OFF</span>
+                      <span className="text-gray-400 text-xs font-bold uppercase"> no plano</span>
+                    </div>
+                  ) : (
+                    <>
+                      {plan.original_price > 0 && (
+                        <span className="text-gray-400 text-sm font-bold line-through">De: R$ {plan.original_price.toFixed(2)}</span>
+                      )}
+                      <div className="flex items-baseline gap-1">
+                        {plan.original_price > 0 && <span className="text-primary font-black text-lg">Por: </span>}
+                        <span className="text-primary font-black text-3xl">R$ {plan.price.toFixed(2)}</span>
+                        <span className="text-gray-400 text-xs font-bold uppercase">/ mês</span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="space-y-3 mb-8">
@@ -85,7 +90,10 @@ const SelectPlanScreen: React.FC<SelectPlanScreenProps> = ({ onBack, clientId })
                 </div>
 
                 <button 
-                  onClick={(e) => { e.stopPropagation(); handleSubscribe(plan.id); }}
+                  onClick={(e) => { 
+                    e.stopPropagation(); 
+                    onSelect(plan);
+                  }}
                   className={`w-full py-4 rounded-2xl font-black transition-all ${
                     selectedPlan?.id === plan.id 
                     ? 'bg-primary text-white shadow-lg shadow-primary/20' 

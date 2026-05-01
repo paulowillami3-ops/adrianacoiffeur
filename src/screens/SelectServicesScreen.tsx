@@ -19,17 +19,33 @@ const SelectServicesScreen: React.FC<SelectServicesScreenProps> = ({
 }) => {
 
   const toggleService = (service: Service) => {
+    const isSub = booking.clientSubscription?.isActive;
+    const isAllowed = booking.clientSubscription?.allowedServices?.includes(service.id);
+    
     setBooking(prev => {
       const exists = prev.selectedServices.find(s => s.id === service.id);
       if (exists) {
         return { ...prev, selectedServices: prev.selectedServices.filter(s => s.id !== service.id) };
       }
+
+      // Check limit for VIP clients
+      if (isSub && isAllowed) {
+        const limit = Number((booking.clientSubscription as any).serviceLimits?.[service.id] || 0);
+        const usedThisMonth = Number((booking.clientSubscription as any).serviceUsage?.[service.id] || 0);
+        const selectedNow = prev.selectedServices.filter(s => s.id === service.id).length;
+        
+        if (limit > 0 && (usedThisMonth + selectedNow) >= limit) {
+          alert(`Limite mensal atingido para este serviço (${limit}/${limit})`);
+          return prev;
+        }
+      }
+
       return { ...prev, selectedServices: [...prev.selectedServices, service] };
     });
   };
 
   const totalPrice = booking.selectedServices.reduce((sum, s) => {
-    const basePrice = (s.min_price !== undefined && s.min_price !== null) ? s.min_price : s.price;
+    const basePrice = (s.min_price !== undefined && s.min_price !== null) ? s.min_price : (s.price || 0);
     return sum + basePrice;
   }, 0);
 
@@ -40,16 +56,35 @@ const SelectServicesScreen: React.FC<SelectServicesScreenProps> = ({
           <button onClick={onBack} className="size-10 rounded-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 text-gray-600 dark:text-gray-400 transition-colors">
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
-          <h2 className="text-lg font-bold flex-1 text-center pr-10 text-slate-900 dark:text-white">Serviços</h2>
+          <h2 className="text-lg font-bold flex-1 text-center pr-10 text-slate-900 dark:text-white">
+            {booking.clientSubscription?.isActive ? 'Painel VIP Clube' : 'Serviços'}
+          </h2>
         </header>
         <main className="flex-1 p-4 pb-32 max-w-md mx-auto w-full">
           <div className="mb-6">
-            <h1 className="text-3xl font-extrabold mb-2 text-slate-900 dark:text-white">Escolha o Serviço</h1>
-            <p className="text-gray-600 dark:text-gray-400 text-sm">Selecione um ou mais serviços para o seu agendamento.</p>
+            <h1 className="text-3xl font-extrabold mb-2 text-slate-900 dark:text-white">
+              {booking.clientSubscription?.isActive ? 'Seus Benefícios' : 'Escolha o Serviço'}
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400 text-sm">
+              {booking.clientSubscription?.isActive 
+                ? `Bem-vindo, ${booking.customerName}! Selecione os serviços inclusos no seu plano.`
+                : 'Selecione um ou mais serviços para o seu agendamento.'
+              }
+            </p>
           </div>
           <div className="space-y-4">
             {(() => {
-              const filtered = services.filter(s => String(s.category_id) === String(booking.selectedCategory?.id));
+              const isVIP = booking.clientSubscription?.isActive;
+              const filtered = services.filter(s => {
+                if (isVIP) {
+                  // Painel VIP: Somente serviços permitidos pelo plano
+                  return booking.clientSubscription?.allowedServices?.includes(String(s.id));
+                }
+                // Fluxo normal: Filtrar por categoria
+                if (String(s.category_id) !== String(booking.selectedCategory?.id)) return false;
+                if (s.is_club_only) return false;
+                return true;
+              });
               const prioritized = [...filtered].sort((a, b) => {
                 const aAllowed = booking.clientSubscription?.isActive && booking.clientSubscription.allowedServices?.includes(a.id);
                 const bAllowed = booking.clientSubscription?.isActive && booking.clientSubscription.allowedServices?.includes(b.id);
@@ -89,16 +124,12 @@ const SelectServicesScreen: React.FC<SelectServicesScreenProps> = ({
                                 <span className="material-symbols-outlined text-sm filled">check_circle</span>
                                 {(() => {
                                   const isSelected = booking.selectedServices.some(s => s.id === service.id);
-                                  const limit = (booking.clientSubscription as any).serviceLimits?.[service.id] || 0;
-                                  const currentUsed = (booking.clientSubscription as any).serviceUsage?.[service.id] || 0;
-
+                                  const limit = Number((booking.clientSubscription as any).serviceLimits?.[service.id] || 0);
+                                  const usedThisMonth = Number((booking.clientSubscription as any).serviceUsage?.[service.id] || 0);
+                                  const selectedNow = booking.selectedServices.filter(s => s.id === service.id).length;
+                                  
                                   if (limit > 0) {
-                                    let available = limit - currentUsed;
-                                    if (isSelected) {
-                                      const idx = booking.selectedServices.findIndex(s => s.id === service.id);
-                                      const countBefore = booking.selectedServices.slice(0, idx).filter(s => s.id === service.id).length;
-                                      available = Math.max(0, available - (countBefore + 1));
-                                    }
+                                    const available = Math.max(0, limit - usedThisMonth - selectedNow);
                                     return `${available}/${limit}`;
                                   }
                                   return "Incluso";
@@ -121,7 +152,16 @@ const SelectServicesScreen: React.FC<SelectServicesScreenProps> = ({
                             );
                           }
 
-                          return `R$ ${service.price.toFixed(2)}`;
+                          if (service.is_club_only && (!service.price || service.price === 0)) {
+                            return (
+                              <span className="text-amber-600 dark:text-amber-500 flex items-center gap-1 font-black tracking-wide">
+                                <span className="material-symbols-outlined text-sm filled">stars</span>
+                                Incluso no Clube
+                              </span>
+                            );
+                          }
+
+                          return `R$ ${(service.price || 0).toFixed(2)}`;
                         })()}
                       </span>
                       <span className="text-gray-400 dark:text-gray-500 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1">

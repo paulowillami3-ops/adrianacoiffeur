@@ -77,7 +77,7 @@ const AdminServicesScreen: React.FC<AdminServicesScreenProps> = ({ onBack, servi
                           editingService.max_price !== undefined && editingService.max_price !== null;
     const hasFixedPrice = editingService.price !== undefined && editingService.price !== null && !isNaN(Number(editingService.price));
 
-    if (!hasFixedPrice && !hasPriceRange) {
+    if (!editingService.is_club_only && !hasFixedPrice && !hasPriceRange) {
       alert('Por favor, preencha o Preço Fixo OU a Faixa de Preço (Mínimo e Máximo).');
       return;
     }
@@ -104,7 +104,8 @@ const AdminServicesScreen: React.FC<AdminServicesScreenProps> = ({ onBack, servi
         duration: isNaN(finalDuration) ? 30 : finalDuration,
         image_url: editingService.imageUrl || '',
         category_id: finalCategoryId,
-        is_active: true
+        is_active: true,
+        is_club_only: editingService.is_club_only || false
       };
 
       console.log('[handleSaveService] payload para o banco:', payload);
@@ -191,12 +192,12 @@ const AdminServicesScreen: React.FC<AdminServicesScreenProps> = ({ onBack, servi
     if (catId !== result.destination.droppableId) return;
 
     const catServices = services.filter(s => String(s.category_id) === catId);
-    const items = Array.from(catServices).sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+    const items = Array.from(catServices).sort((a: any, b: any) => (a.display_order ?? 0) - (b.display_order ?? 0));
     const [reorderedItem] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, reorderedItem);
 
     for (let i = 0; i < items.length; i++) {
-      await supabase.from('services').update({ display_order: i }).eq('id', items[i].id);
+      await supabase.from('services').update({ display_order: i }).eq('id', (items[i] as any).id);
     }
 
     await onRefresh();
@@ -232,7 +233,9 @@ const AdminServicesScreen: React.FC<AdminServicesScreenProps> = ({ onBack, servi
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase text-gray-400 px-1">Preço Fixo (Padrão)</label>
+                <label className="text-[10px] font-black uppercase text-gray-400 px-1">
+                  Preço Fixo (Padrão) {editingService.is_club_only && '(Opcional)'}
+                </label>
                 <input type="number" step="0.01" className="w-full bg-white dark:bg-surface-dark p-3 rounded-lg border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-gray-400" placeholder="0.00" value={editingService.price || ''} onChange={e => setEditingService({ ...editingService, price: e.target.value === '' ? undefined : parseFloat(e.target.value) })} />
               </div>
               <div className="space-y-1">
@@ -295,6 +298,20 @@ const AdminServicesScreen: React.FC<AdminServicesScreenProps> = ({ onBack, servi
                 </p>
               )}
             </div>
+            
+            <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
+              <input 
+                type="checkbox" 
+                id="club-only-toggle"
+                checked={editingService.is_club_only || false} 
+                onChange={e => setEditingService({ ...editingService, is_club_only: e.target.checked })}
+                className="size-5 rounded border-gray-300 text-amber-500 focus:ring-amber-500"
+              />
+              <label htmlFor="club-only-toggle" className="flex flex-col cursor-pointer">
+                <span className="text-sm font-bold text-slate-900 dark:text-white">Serviço Exclusivo do Clube</span>
+                <span className="text-[10px] text-gray-500">Se marcado, apenas membros logados poderão ver e agendar.</span>
+              </label>
+            </div>
 
             <button onClick={handleSaveService} disabled={loading} className="w-full bg-primary text-white py-4 rounded-xl font-bold shadow-lg shadow-primary/20 active:scale-95 transition-all">
               {loading ? 'Salvando...' : 'Salvar Serviço'}
@@ -339,6 +356,7 @@ const AdminServicesScreen: React.FC<AdminServicesScreenProps> = ({ onBack, servi
                       <div {...provided.droppableProps} ref={provided.innerRef} className="p-2 space-y-2 border-t border-gray-50 dark:border-white/5 bg-gray-50/50 dark:bg-black/10">
                         {catServices.length === 0 && <p className="text-center py-6 text-[10px] text-gray-400 italic font-bold uppercase">Nenhum serviço nesta categoria</p>}
                         {catServices.map((s, index) => (
+                          // @ts-ignore
                           <Draggable key={s.id} draggableId={String(s.id)} index={index}>
                             {(provided) => (
                               <div ref={provided.innerRef} {...provided.draggableProps} className="bg-white dark:bg-surface-dark p-3 rounded-xl border border-gray-200 dark:border-white/5 flex gap-3 items-center shadow-sm">

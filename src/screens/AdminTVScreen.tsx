@@ -132,7 +132,10 @@ const AdminTVScreen: React.FC<{ appointments: Appointment[]; onBack: () => void;
                         {app.customerName.charAt(0)}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h3 className={`text-xl font-bold truncate leading-tight ${isNow ? 'text-yellow-100' : 'text-white'}`}>{app.customerName}</h3>
+                        <h3 className={`text-xl font-bold truncate leading-tight flex items-center gap-2 ${isNow ? 'text-yellow-100' : 'text-white'}`}>
+                          {app.customerName}
+                          {app.is_vip && <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full uppercase tracking-widest shadow-lg">VIP</span>}
+                        </h3>
                         <p className={`truncate font-mono text-xs opacity-60 ${isNow ? 'text-yellow-200' : 'text-gray-400'}`}>{app.customerPhone}</p>
                       </div>
                     </div>

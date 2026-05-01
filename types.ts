@@ -26,13 +26,15 @@ export type AppView =
   | 'ADMIN_WEEKLY_SCHEDULE'
   | 'CUSTOMER_LOGIN'
   | 'ADMIN_CLIENTS'
-  | 'ADMIN_CLUB';
+  | 'ADMIN_CLUB'
+  | 'CLUB_LOGIN';
 
 export interface SubscriptionPlan {
   id: string;
   name: string;
   description: string;
   price: number;
+  original_price?: number;
   benefits: string;
   qr_code_url?: string;
   pix_code?: string;
@@ -41,14 +43,17 @@ export interface SubscriptionPlan {
   allowed_services?: string[]; // Legacy list
   service_limits?: Record<string, number>; // serviceId -> monthlyLimit
   service_components?: Record<string, string[]>; // comboId -> basicServiceIds
+  display_order: number;
   created_at: string;
+  price_on_evaluation?: boolean;
+  discount_percentage?: number;
 }
 
 export interface UserSubscription {
   id: string;
   client_id: number;
   plan_id: number;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  status: 'PENDING' | 'ACTIVE' | 'INADIMPLENTE' | 'CANCELLED' | 'EXPIRED' | 'REJECTED' | 'APPROVED';
   payment_proof_url?: string;
   created_at: string;
   approved_at?: string;
@@ -107,6 +112,7 @@ export interface Service {
   category_id?: string;
   display_order: number;
   popular?: boolean;
+  is_club_only?: boolean;
 }
 
 export interface Appointment {
@@ -124,10 +130,12 @@ export interface Appointment {
   professionalName?: string;
   clientSubscription?: {
     planName: string;
-    cutsUsed: number;
-    cutsLimit: number;
     isActive: boolean;
+    allowedServices?: string[];
+    serviceLimits?: Record<string, number>;
+    serviceUsage?: Record<string, number>;
   };
+  is_vip?: boolean;
 }
 
 export interface BookingState {
@@ -141,9 +149,10 @@ export interface BookingState {
   selectedPlan?: SubscriptionPlan;
   clientSubscription?: {
     planName: string;
-    cutsUsed: number;
-    cutsLimit: number;
     isActive: boolean;
+    allowedServices?: string[];
+    serviceLimits?: Record<string, number>;
+    serviceUsage?: Record<string, number>;
   };
   birthDate?: string;
 }

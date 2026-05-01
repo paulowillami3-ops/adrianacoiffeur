@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import AdminSubscriptionsScreen from './AdminSubscriptionsScreen';
 import AdminManagePlansScreen from './AdminManagePlansScreen';
+import AdminClubDashboardScreen from './AdminClubDashboardScreen';
 
 const AdminClubManagementScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
-  const [activeTab, setActiveTab] = useState<'MEMBERS' | 'PLANS'>('MEMBERS');
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'MEMBERS' | 'PLANS'>('DASHBOARD');
 
   return (
     <div className="bg-background-light dark:bg-background-dark min-h-screen flex flex-col transition-colors">
@@ -20,7 +21,18 @@ const AdminClubManagementScreen: React.FC<{ onBack: () => void }> = ({ onBack })
             </div>
           </div>
 
-          <div className="flex p-1 bg-gray-100 dark:bg-white/5 rounded-2xl max-w-sm mx-auto border border-gray-200 dark:border-white/5">
+          <div className="flex p-1 bg-gray-100 dark:bg-white/5 rounded-2xl max-w-md mx-auto border border-gray-200 dark:border-white/5">
+            <button
+              onClick={() => setActiveTab('DASHBOARD')}
+              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold transition-all ${
+                activeTab === 'DASHBOARD' 
+                  ? 'bg-white dark:bg-surface-dark text-slate-900 dark:text-white shadow-sm' 
+                  : 'text-gray-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <span className="material-symbols-outlined text-sm">monitoring</span>
+              Resumo
+            </button>
             <button
               onClick={() => setActiveTab('MEMBERS')}
               className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold transition-all ${
@@ -57,7 +69,9 @@ const AdminClubManagementScreen: React.FC<{ onBack: () => void }> = ({ onBack })
             transition={{ duration: 0.3 }}
             className="h-full"
           >
-            {activeTab === 'MEMBERS' ? (
+            {activeTab === 'DASHBOARD' ? (
+              <AdminClubDashboardScreen />
+            ) : activeTab === 'MEMBERS' ? (
               <AdminSubscriptionsScreen onBack={onBack} hideHeader />
             ) : (
               <AdminManagePlansScreen onBack={onBack} hideHeader />

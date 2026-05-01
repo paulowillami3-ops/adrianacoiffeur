@@ -133,17 +133,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const loadBirthdayClients = async () => {
     const today = new Date();
-    const mmdd = format(today, 'MM-dd');
+    const mm = format(today, 'MM');
+    const dd = format(today, 'dd');
     
-    // Using a more focused query to avoid loading too much data
+    // Filtro via SQL para performance
     const { data } = await supabase
       .from('clients')
       .select('name, phone, birth_date')
-      .not('birth_date', 'is', 'null');
+      .not('birth_date', 'is', 'null')
+      .like('birth_date', `%-${mm}-${dd}`);
       
     if (data) {
-      const luckyOnes = data.filter((c: any) => c.birth_date && c.birth_date.includes(mmdd));
-      setBirthdayClients(luckyOnes);
+      setBirthdayClients(data);
     }
   };
 
@@ -408,7 +409,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       {app.services.map(s => s.name).join(' + ') || 'Serviço não especificado'}
                                     </span>
                                     <h4 className="font-black text-base md:text-lg text-slate-800 dark:text-white leading-tight mb-1 truncate">{app.customerName}</h4>
-                                    
                                     <div className="flex flex-wrap items-center gap-1 md:gap-2 mt-1">
                                       {(() => {
                                         const pro = professionals.find(p => p.id === app.professionalId);
@@ -424,6 +424,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       }`}>
                                         {app.status === 'PENDING' ? 'Pendente' : 'Confirmado'}
                                       </span>
+                                      {app.is_vip && (
+                                        <span className="text-[8px] md:text-[9px] font-black px-1.5 md:px-2 py-0.5 rounded-full uppercase tracking-tighter border shrink-0 bg-amber-50 text-amber-600 border-amber-200 shadow-[0_0_8px_rgba(217,119,6,0.3)]">
+                                          💎 VIP
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
@@ -439,7 +444,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       placeholder="0,00"
                                     />
                                   ) : (
-                                    <p className="text-base md:text-xl font-black text-slate-900 dark:text-white whitespace-nowrap">R$ {(Number(app.totalPrice) || 0).toFixed(2).replace('.',',')}</p>
+                                    <p className="text-base md:text-xl font-black text-slate-900 dark:text-white whitespace-nowrap">
+                                      {app.is_vip && (app.totalPrice === 0) ? (
+                                        <span className="text-amber-600">INCLUSO</span>
+                                      ) : (
+                                        `R$ ${(Number(app.totalPrice) || 0).toFixed(2).replace('.',',')}`
+                                      )}
+                                    </p>
                                   )}
                                   {hasEvaluationService(app.services) && !editingPriceId && (
                                     app.finalPriceSet ? (

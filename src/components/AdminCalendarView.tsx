@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { format, parseISO, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Appointment, Professional, BlockedSlot } from '../types';
+import { Appointment, Professional, BlockedSlot } from '../../types';
 
 interface AdminCalendarViewProps {
   appointments: Appointment[];
@@ -126,7 +126,10 @@ const AdminCalendarView: React.FC<AdminCalendarViewProps> = ({
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex flex-col min-w-0">
-                      <span className="font-bold text-xs truncate">{app.customerName}</span>
+                      <div className="flex items-center gap-1">
+                        <span className="font-bold text-xs truncate">{app.customerName}</span>
+                        {app.is_vip && <span className="text-[8px] md:text-[9px] font-black px-1.5 md:px-2 py-0.5 rounded-full uppercase tracking-tighter border shrink-0 bg-amber-50 text-amber-600 border-amber-200 shadow-[0_0_8px_rgba(217,119,6,0.3)]">💎 VIP</span>}
+                      </div>
                       {pro && <span className="text-[8px] uppercase font-bold brightness-75" style={{ color: pro.color }}>{pro.name}</span>}
                     </div>
                     <span className="text-[10px] font-mono opacity-80">{app.time}</span>

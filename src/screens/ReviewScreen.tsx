@@ -22,11 +22,13 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({ booking, onConfirm, 
         const used = runningUsage[s.id] || 0;
         if (used < limit) { serviceIsFree[s.id] = true; runningUsage[s.id] = used + 1; }
         else { serviceIsFree[s.id] = false; }
+      } else if (s.is_club_only && (!s.price || s.price === 0)) {
+        serviceIsFree[s.id] = true;
       } else { serviceIsFree[s.id] = false; }
     });
   }
 
-  const totalPrice = booking.selectedServices.reduce((sum, s) => serviceIsFree[s.id] ? sum : sum + s.price, 0);
+  const totalPrice = booking.selectedServices.reduce((sum, s) => serviceIsFree[s.id] ? sum : sum + (s.price || 0), 0);
   const hasFreeServices = Object.values(serviceIsFree).some(v => v);
 
   return (
@@ -93,7 +95,7 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({ booking, onConfirm, 
                       })()}
                     </p>
                   ) : (
-                    <p className="font-bold">R$ {s.price.toFixed(2)}</p>
+                    <p className="font-bold">R$ {(s.price || 0).toFixed(2)}</p>
                   )}
                 </div>
               ))}

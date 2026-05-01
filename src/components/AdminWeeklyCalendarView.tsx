@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { format, parseISO, addDays, startOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Appointment, Professional, BlockedSlot } from '../types';
+import { Appointment, Professional, BlockedSlot } from '../../types';
 
 interface AdminWeeklyCalendarViewProps {
   appointments: Appointment[];
@@ -91,7 +91,10 @@ const AdminWeeklyCalendarView: React.FC<AdminWeeklyCalendarViewProps> = ({
                       const pro = professionals.find(p => p.id === app.professionalId);
                       return (
                         <div key={app.id} onClick={() => onAppointmentClick(app)} className="absolute left-0.5 right-0.5 rounded p-1 shadow-sm cursor-pointer z-10 overflow-hidden" style={{ top: `${pos.top}px`, height: `${pos.height}px`, backgroundColor: pro?.color ? `${pro.color}15` : '#eee', borderLeft: `3px solid ${pro?.color || '#999'}` }}>
-                          <div className="text-[9px] font-black truncate leading-tight text-slate-800 dark:text-white">{app.customerName}</div>
+                          <div className="text-[9px] font-black truncate leading-tight text-slate-800 dark:text-white">
+                            {app.customerName}
+                            {app.is_vip && <span className="ml-1 text-[8px]">💎</span>}
+                          </div>
                           <div className="text-[8px] opacity-60 truncate">{app.services.map(s => s.name).join(', ')}</div>
                         </div>
                       );
