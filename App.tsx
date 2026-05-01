@@ -203,6 +203,10 @@ const App: React.FC = () => {
       if (!showPastHistory) query = query.gte('appointment_date', format(addDays(new Date(), -90), 'yyyy-MM-dd'));
     } else {
       query = query.gte('appointment_date', limitDate);
+      // Optimize: Limit future fetch to 60 days to avoid overloading
+      const maxFutureDate = format(addDays(new Date(), 60), 'yyyy-MM-dd');
+      query = query.lte('appointment_date', maxFutureDate);
+      
       supabase.from('chat_messages').select('*', { count: 'exact', head: true }).eq('is_read', false).eq('sender_type', 'CUSTOMER').then(({ count }) => setUnreadCount(count || 0));
     }
 

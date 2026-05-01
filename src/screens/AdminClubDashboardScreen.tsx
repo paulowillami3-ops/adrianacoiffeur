@@ -66,14 +66,22 @@ const AdminClubDashboardScreen: React.FC = () => {
           .select(`
             *,
             clients ( name, phone ),
-            services ( name )
+            appointment_services (
+              service:services ( name )
+            )
           `)
-          .eq('date', today)
+          .eq('appointment_date', today)
           .in('client_id', activeClientIds)
-          .order('time', { ascending: true });
+          .order('appointment_time', { ascending: true });
 
         if (!apptError && appts) {
-          setTodayAppointments(appts);
+          // Process appointments to flatten service names
+          const processedApps = appts.map((a: any) => ({
+            ...a,
+            time: a.appointment_time?.slice(0, 5),
+            serviceName: a.appointment_services?.map((as: any) => as.service?.name).join(' + ') || 'Serviço'
+          }));
+          setTodayAppointments(processedApps);
         }
       }
 
@@ -166,7 +174,7 @@ const AdminClubDashboardScreen: React.FC = () => {
                       {appt.clients?.name || 'Cliente Oculto'}
                     </div>
                     <div className="text-xs text-gray-500 truncate max-w-[150px]">
-                      {appt.services?.name || 'Serviço Personalizado'}
+                      {appt.serviceName}
                     </div>
                   </div>
                 </div>

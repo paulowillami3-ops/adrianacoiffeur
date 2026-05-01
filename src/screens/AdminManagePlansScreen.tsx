@@ -382,12 +382,12 @@ const AdminManagePlansScreen: React.FC<{
                                     <div className="size-10 bg-amber-500/10 text-amber-500 rounded-xl flex items-center justify-center">
                                       <span className="material-symbols-outlined">card_membership</span>
                                     </div>
-                                    <input
-                                      type="text"
-                                      className="bg-transparent font-black text-slate-900 dark:text-white uppercase tracking-tight flex-1 min-w-[350px] focus:outline-none focus:border-b-2 focus:border-amber-500 border-b-2 border-transparent"
-                                      value={localNames[plan.id] || ''}
-                                      onChange={(e) => setLocalNames(prev => ({ ...prev, [plan.id]: e.target.value }))}
-                                    />
+                                      <input
+                                        type="text"
+                                        className="bg-transparent font-black text-slate-900 dark:text-white uppercase tracking-tight flex-1 min-w-[500px] focus:outline-none focus:border-b-2 focus:border-amber-500 border-b-2 border-transparent"
+                                        value={localNames[plan.id] || ''}
+                                        onChange={(e) => setLocalNames(prev => ({ ...prev, [plan.id]: e.target.value }))}
+                                      />
                                   </div>
                                   
                                   {confirmDeleteId === plan.id ? (
